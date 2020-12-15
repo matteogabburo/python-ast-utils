@@ -56,9 +56,13 @@ def ast2dict(ast_tree: ast.AST) -> Dict:
     if isinstance(ast_tree, ast.AST):
 
         class_name = ast_tree.__class__.__name__
-        ret = {class_name: {}}
-        for field in ast_tree._fields:
-            ret[class_name][field] = ast2dict(ast_tree.__dict__[field])
+
+        if len(ast_tree._fields) > 0:
+            ret = {class_name: {}}
+            for field in ast_tree._fields:
+                ret[class_name][field] = ast2dict(ast_tree.__dict__[field])
+        else:
+            ret = class_name
 
     elif isinstance(ast_tree, list):
         ret = []
@@ -162,29 +166,4 @@ def ast2json(ast_tree: ast.AST) -> json:
     """
 
     return json.dumps(ast2dict(ast_tree))
-
-def ast2compressedheap(ast_tree: ast.AST) -> List
-
-    """
-    
-    """
-
-
-
-    if isinstance(ast_tree, ast.AST):
-
-        class_name = ast_tree.__class__.__name__
-        ret = {class_name: {}}
-        for field in ast_tree._fields:
-            ret[class_name][field] = ast2dict(ast_tree.__dict__[field])
-
-    elif isinstance(ast_tree, list):
-        ret = []
-        for element in ast_tree:
-            ret.append(ast2dict(element))
-    else:
-        ret = ast_tree
-
-    return ret
-
 
