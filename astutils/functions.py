@@ -167,3 +167,61 @@ def ast2json(ast_tree: ast.AST) -> json:
 
     return json.dumps(ast2dict(ast_tree))
 
+
+def ast2heap(ast_tree: ast.AST, not_considered_leaves: List=[]) -> List:
+    """Takes in input an Abstract Syntax Tree representing a Python program and return it represented with an heap structure. The resulting structure is defined by a list of nodes. Each node is composed as follows:
+
+    heap_node = {
+        _heap_id: (int) the "id" of the node
+        _heap_type: (str) generally it is a non-terminal of the grammar (grammar reference https://docs.python.org/3/library/ast.html)
+        _heap_value: [Optional] (dict) a dictionary containing the values of an ast node (generally can be both a terminal and a non-terminal of the grammar). 
+        _heap_children: [Optional] (list[int]) a lis of "_heap_ids". Each id contained in this list is a children of this node
+    }
+
+    Args:
+        ast_tree (ast.AST): An Abstract Syntax Tree representing a Python program.
+        not_considered_leaves (list, optional): A list containing all the not desidered types. This could be used to reduce the heap size keeping only the wanted nodes. Defaults to [].
+
+    Returns:
+        List: An heap representing the input AST.
+    """
+
+    HEAP_ID = "_heap_id"
+    HEAP_CHILDREN = "_heap_children"
+    HEAP_TYPE = "_heap_type"
+    HEAP_VALUE = "_heap_value"
+
+    def _build_heap(tree: ast.AST, heap, not_considered_leaves, field, parent):
+
+        if isinstance(tree, ast.AST):
+
+            node_id = len(heap)
+
+            # if the current tree is not the root
+            if parent:
+                if HEAP_CHILDREN not in parent:
+                    parent[HEAP_CHILDREN] = []
+                parent[HEAP_CHILDREN].append(node_id)
+
+            class_name = tree.__class__.__name__
+            heap_node = {HEAP_ID: node_id, HEAP_TYPE: class_name}
+            heap.append(heap_node)
+            
+            if len(tree._fields) > 0:
+                for field in tree._fields:
+                    if field not in not_considered_leaves:
+                        _build_heap(tree.__dict__[field], heap, not_considered_leaves, field, heap_node)
+
+        elif isinstance(tree, tuple) or isinstance(tree, list):
+            for element in tree:
+                _build_heap(element, heap, not_considered_leaves, field, parent)
+
+        else:
+            # append to the last inserted node
+            if HEAP_VALUE not in heap[-1]:
+                heap[-1][HEAP_VALUE] = {}
+            heap[-1][HEAP_VALUE][field] = tree
+    
+    heap = []
+    _build_heap(ast_tree, heap, not_considered_leaves, None, None)
+    return heap
