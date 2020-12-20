@@ -225,3 +225,7 @@ def ast2heap(ast_tree: ast.AST, not_considered_leaves: List=[]) -> List:
     heap = []
     _build_heap(ast_tree, heap, not_considered_leaves, None, None)
     return heap
+
+def heap2ast(heap: list) -> ast.AST:
+
+    raise NotImplementedError
