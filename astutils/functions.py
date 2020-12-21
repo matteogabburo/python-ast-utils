@@ -244,29 +244,38 @@ def ast2heap(ast_tree: ast.AST, source:str=None, positional:bool=True, not_consi
                     # conditions
                     def is_node_abstract(node): return node[HEAP_CODE] is None
                     def is_not_root(heap): return len(heap) > 0
-                    def is_prec_node_abstract(heap): return HEAP_PLACEHOLDER in heap[-1]
-                    def is_not_a_main_root_child(heap): return len(heap) > 1
+                    def is_prec_node_abstract(node): return HEAP_PLACEHOLDER in node
 
-                    if is_node_abstract(heap_node) and is_not_root(heap):
+                    if not is_not_root(heap):
+                        heap_node[HEAP_CODE] = source
 
-                        if not is_node_abstract( heap[-1]):
-                            heap_node[HEAP_PLACEHOLDER] = heap[-1][HEAP_CODE]
+                    elif is_node_abstract(heap_node) and is_not_root(heap):
+
+                        if not is_node_abstract(parent):
+                            heap_node[HEAP_PLACEHOLDER] = parent[HEAP_CODE]
                         else:
-                            assert heap[-1][HEAP_PLACEHOLDER]
-                            heap_node[HEAP_PLACEHOLDER] = heap[-1][HEAP_PLACEHOLDER]
+                            assert parent[HEAP_PLACEHOLDER]
+                            heap_node[HEAP_PLACEHOLDER] = parent[HEAP_PLACEHOLDER]
 
                     elif is_not_root(heap) and is_prec_node_abstract(heap):
-                        assert heap[-1][HEAP_PLACEHOLDER]
+                        assert parent[HEAP_PLACEHOLDER]
                         # replace the first occurrence of the current text in the placeholder
-                        heap[-1][HEAP_PLACEHOLDER] = heap[-1][HEAP_PLACEHOLDER].replace(heap_node[HEAP_CODE], ALIAS_STR.format(node_id), 1)
-
-                    elif is_not_a_main_root_child(heap):
-                        # replace the first occurrence of the current text in the code
-                        assert HEAP_CODE in heap[-1]
-                        heap[-1][HEAP_CODE] = heap[-1][HEAP_CODE].replace(heap_node[HEAP_CODE], ALIAS_STR.format(node_id), 1)
+                        parent[HEAP_PLACEHOLDER] = parent[HEAP_PLACEHOLDER].replace(heap_node[HEAP_CODE], ALIAS_STR.format(node_id), 1)
+                    
                     else:
-                        # there should be only the root node or one of its children
-                        pass
+                        # replace the first occurrence of the current text in the code
+                        assert HEAP_CODE in parent
+                        print("->", heap_node)
+                        parent[HEAP_CODE] = parent[HEAP_CODE].replace(heap_node[HEAP_CODE], ALIAS_STR.format(node_id), 1)
+                        
+                    """
+                    else:
+                        # is one of the children of the main root, then initialize the root with the full source code
+                        if is_node_abstract(heap[-1]):
+                            heap[-1][HEAP_CODE] = source
+
+                        heap[-1][HEAP_CODE] = heap[-1][HEAP_CODE].replace(heap_node[HEAP_CODE], ALIAS_STR.format(node_id), 1)
+                    """
 
             heap.append(heap_node)
 
@@ -288,6 +297,51 @@ def ast2heap(ast_tree: ast.AST, source:str=None, positional:bool=True, not_consi
     heap = []
     _build_heap(ast_tree, source, positional, heap, not_considered_leaves, None, None)
     return heap
+
+
+def heap2code(heap: list) -> list:
+
+    raise NotImplementedError
+
+    HEAP_ID = "_heap_id"
+    HEAP_CHILDREN = "_heap_children"
+    HEAP_TYPE = "_heap_type"
+    HEAP_VALUE = "_heap_value"
+    HEAP_CODE = "_heap_code"
+    HEAP_PLACEHOLDER = "_heap_placeholder"
+    ALIAS_STR = "@{}"
+
+
+    def _dfs_build(root, heap, parent):
+
+        print(root)
+
+        assert HEAP_CODE in root
+
+        def has_children(node): return HEAP_CHILDREN in node
+
+        #def _update_root_code(root, )
+
+
+        if has_children(root):
+            
+            for heap_node_id in root[HEAP_CHILDREN]:
+                
+                assert heap[heap_node_id][HEAP_ID] == heap_node_id
+                _dfs_build(heap[heap_node_id], heap)
+
+                #if 
+
+                print("->", root)
+        #else:
+            # is a leaf
+
+            
+
+    _dfs_build(heap[0], heap, None)
+    return None
+
+
 
 def heap2ast(heap: list) -> ast.AST:
 
