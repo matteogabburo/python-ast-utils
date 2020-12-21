@@ -7,3 +7,4 @@ from astutils.functions import dict2json
 from astutils.functions import ast2json
 from astutils.functions import ast2heap
 from astutils.functions import heap2code
+from astutils.functions import heap2tokens
