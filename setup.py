@@ -37,7 +37,7 @@ setuptools.setup(
     description="Some utility to handle and process Python Abstract Syntax Trees",
     long_description=load_long_description(),
     long_description_content_type="text/markdown",
-    url="https://github.com/matteogabburo/programming-languages-tokenizer",
+    url="https://github.com/matteogabburo/python-ast-utils",
     packages=setuptools.find_packages(),
     install_requires=load_requirements(),
     classifiers=[

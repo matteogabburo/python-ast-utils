@@ -8,7 +8,7 @@ import astutils
 ast = astutils.ast_parse("path/to/a/file.py")
 ```
 
-#### Unparse a Python AST:
+#### Unparse a Python AST (only from Python3.9):
 ```.py
 import astutils
 ast = astutils.ast_parse("path/to/a/file.py")
@@ -44,4 +44,11 @@ json_ast = astutils.dict2json(dict_ast)
 import astutils
 ast = astutils.ast_parse("path/to/a/file.py")
 json_ast = astutils.ast2json(ast)
+```
+
+#### AST2heap:
+```.py
+import astutils
+ast = astutils.ast_parse("path/to/a/file.py")
+heap_ast = astutils.ast2heap(ast, not_considered_leaves=["type_comment", "annotation"])
 ```
