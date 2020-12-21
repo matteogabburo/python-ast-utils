@@ -4,3 +4,4 @@ from astutils.functions import ast2dict
 from astutils.functions import dict2ast
 from astutils.functions import dict2json
 from astutils.functions import ast2json
+from astutils.functions import ast_parse_from_string
