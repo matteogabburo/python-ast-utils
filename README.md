@@ -1,4 +1,4 @@
-# python-ast-utils
+# python-ast-utils [![Build Status](https://travis-ci.com/matteogabburo/python-ast-utils.svg?branch=main)](https://travis-ci.com/matteogabburo/python-ast-utils)
 
 Some utility functions used to handle Python AST.
 
