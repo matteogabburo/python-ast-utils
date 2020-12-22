@@ -8,6 +8,13 @@ import astutils
 ast = astutils.ast_parse("path/to/a/file.py")
 ```
 
+#### Parse a string representing a Python file:
+```.py
+import astutils
+sourcecode = "def hello(name):\n\tprint('hello', name)\nhello('John')\n"
+ast = astutils.ast_parse_from_string(sourcecode)
+```
+
 #### Unparse a Python AST (only from Python3.9):
 ```.py
 import astutils
@@ -28,7 +35,7 @@ import astutils
 ast1 = astutils.ast_parse("path/to/a/file.py")
 dict_ast = astutils.ast2dict(ast1)
 ast2 = astutils.dict2ast(ast)
-assert ast1 == ast2
+# ast1 == ast2
 ```
 
 #### dict2Json:
@@ -46,9 +53,29 @@ ast = astutils.ast_parse("path/to/a/file.py")
 json_ast = astutils.ast2json(ast)
 ```
 
-#### AST2heap:
+#### AST2Heap:
 ```.py
 import astutils
 ast = astutils.ast_parse("path/to/a/file.py")
-heap_ast = astutils.ast2heap(ast, not_considered_leaves=["type_comment", "annotation"])
+heap_ast = astutils.ast2heap(ast)
+```
+
+#### Heap2Code:
+```.py
+import astutils
+sourcecode = "def hello(name):\n\tprint('hello', name)\nhello('John')\n"
+ast = astutils.ast_parse_from_string(sourcecode)
+heap_ast = astutils.ast2heap(ast, source=sourcecode)
+code = astutils.heap2code(heap_ast)
+assert(sourcecode == code)
+```
+
+#### Heap2Tokens:
+```.py
+import astutils
+sourcecode = "def hello(name):\n\tprint('hello', name)\nhello('John')\n"
+ast = astutils.ast_parse_from_string(sourcecode)
+heap_ast = astutils.ast2heap(ast, source=sourcecode)
+tokens = astutils.heap2tokens(heap_ast)
+assert(sourcecode == "".join([tok for tok, node_id in tokens]))
 ```
