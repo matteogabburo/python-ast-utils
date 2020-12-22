@@ -2,6 +2,17 @@
 
 Some utility functions used to handle Python AST.
 
+## Installation
+
+- Important: To use all the functions, ```Python3.9``` is required.
+
+#### pip + git
+```
+pip install git+https://github.com/matteogabburo/python-ast-utils.git
+```
+
+## Examples
+
 #### Parse a Python file:
 ```.py
 import astutils
