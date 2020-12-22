@@ -1,6 +1,8 @@
 import ast
 import json
 from typing import Tuple, Dict, List
+import re
+from tokenize import Number
 
 
 def _read(fn, *args):
@@ -11,6 +13,7 @@ def _read(fn, *args):
 
 def ast_parse(
     filename: str,
+    input_text: str = None,
     mode: str = "exec",
     type_comments: bool = False,
     feature_version: Tuple[int, int] = None,
@@ -27,7 +30,36 @@ def ast_parse(
         ast.AST: The Abstract Syntax Tree obtained by the input Python file.
     """
 
-    return ast.parse(_read(filename))
+    return ast.parse(
+        _read(filename),
+        mode=mode,
+        type_comments=type_comments,
+        feature_version=feature_version,
+    )
+
+
+def ast_parse_from_string(
+    source: str,
+    input_text: str = None,
+    mode: str = "exec",
+    type_comments: bool = False,
+    feature_version: Tuple[int, int] = None,
+) -> ast.AST:
+    """Takes in input the path to a Python file, and return an Abstract Syntax Tree.
+
+    Args:
+        source (str): A string representing a Python source code.
+        mode (str, optional): Can be 'exec' or 'func_type'. if mode is 'func_type', the input syntax is modified to correspond to PEP 484 “signature type comments”. Defaults to 'exec'.
+        type_comments (bool, optional): If type_comments=True is given, the parser is modified to check and return type comments as specified by PEP 484 and PEP 526. Defaults to False.
+        feature_version (Tuple[int, int], optional): A tuple (major, minor) (for example (3, 4)) used to decide which version of the Python grammar to use during the parsing. Defaults to None.
+
+    Returns:
+        ast.AST: The Abstract Syntax Tree obtained by the input Python file.
+    """
+
+    return ast.parse(
+        source, mode=mode, type_comments=type_comments, feature_version=feature_version
+    )
 
 
 def ast_unparse(ast_tree: ast.AST) -> str:
@@ -168,30 +200,48 @@ def ast2json(ast_tree: ast.AST) -> json:
     return json.dumps(ast2dict(ast_tree))
 
 
-def ast2heap(ast_tree: ast.AST, not_considered_leaves: List=[]) -> List:
+# heap global strings
+HEAP_ID = "_heap_id"
+HEAP_CHILDREN = "_heap_children"
+HEAP_TYPE = "_heap_type"
+HEAP_VALUE = "_heap_value"
+HEAP_CODE = "_heap_code"
+HEAP_PLACEHOLDER = "_heap_placeholder"
+CHILD_PLACEHOLDER = "<child_id={}>"
+NUMBER_PLACEHOLDER = "<number={}>"
+
+
+def ast2heap(
+    ast_tree: ast.AST,
+    source: str = None,
+    positional: bool = True,
+    not_considered_leaves: List = [],
+) -> List:
     """Takes in input an Abstract Syntax Tree representing a Python program and return it represented with an heap structure. The resulting structure is defined by a list of nodes. Each node is composed as follows:
 
+    ```
     heap_node = {
         _heap_id: (int) the "id" of the node
         _heap_type: (str) generally it is a non-terminal of the grammar (grammar reference https://docs.python.org/3/library/ast.html)
         _heap_value: [Optional] (dict) a dictionary containing the values of an ast node (generally can be both a terminal and a non-terminal of the grammar). 
-        _heap_children: [Optional] (list[int]) a lis of "_heap_ids". Each id contained in this list is a children of this node
+        _heap_children: [Optional] (list[int]) a list of "_heap_ids". Each id contained in this list is a children of this node
+        _heap_code: [Optional] (str) contain the source code associate with this specific node. Initialized only if the source parameter is initialized
     }
+    ```
 
     Args:
         ast_tree (ast.AST): An Abstract Syntax Tree representing a Python program.
+        source (str, optional): The original code used to build the AST. If not None the final heap will contain a field with the original code associated with the node.
+        positional (str, optional): Considered only if the source parameter is initialized. When positional is True, the field ```_heap_code``` of the final model will contain alias that replace the original value of each subtoken (For example, ```@11``` is a placeolder for the node with ```_heap_id=11```).
         not_considered_leaves (list, optional): A list containing all the not desidered types. This could be used to reduce the heap size keeping only the wanted nodes. Defaults to [].
 
     Returns:
         List: An heap representing the input AST.
     """
 
-    HEAP_ID = "_heap_id"
-    HEAP_CHILDREN = "_heap_children"
-    HEAP_TYPE = "_heap_type"
-    HEAP_VALUE = "_heap_value"
-
-    def _build_heap(tree: ast.AST, heap, not_considered_leaves, field, parent):
+    def _build_heap(
+        tree: ast.AST, source, positional, heap, not_considered_leaves, field, parent
+    ):
 
         if isinstance(tree, ast.AST):
 
@@ -205,26 +255,234 @@ def ast2heap(ast_tree: ast.AST, not_considered_leaves: List=[]) -> List:
 
             class_name = tree.__class__.__name__
             heap_node = {HEAP_ID: node_id, HEAP_TYPE: class_name}
+
+            if source:
+
+                heap_node[HEAP_CODE] = ast.get_source_segment(source, tree, padded=True)
+
+                if positional:
+
+                    # conditions
+                    def is_node_abstract(node):
+                        return node[HEAP_CODE] is None
+
+                    def is_not_root(heap):
+                        return len(heap) > 0
+
+                    def is_prec_node_abstract(node):
+                        return HEAP_PLACEHOLDER in node
+
+                    # handle numbers to avoid problems during the tree construction
+                    def __replace(m):
+                        return NUMBER_PLACEHOLDER.format(m.group(0))
+
+                    if heap_node[HEAP_CODE]:
+                        heap_node[HEAP_CODE] = re.sub(
+                            Number, __replace, heap_node[HEAP_CODE]
+                        )
+
+                    if not is_not_root(heap):
+                        heap_node[HEAP_CODE] = re.sub(Number, __replace, source)
+
+                    elif is_node_abstract(heap_node) and is_not_root(heap):
+
+                        if not is_node_abstract(parent):
+                            heap_node[HEAP_PLACEHOLDER] = parent[HEAP_CODE]
+                        else:
+                            assert parent[HEAP_PLACEHOLDER]
+                            heap_node[HEAP_PLACEHOLDER] = parent[HEAP_PLACEHOLDER]
+
+                    elif is_not_root(heap) and is_prec_node_abstract(heap):
+                        assert parent[HEAP_PLACEHOLDER]
+                        # replace the first occurrence of the current text in the placeholder
+                        parent[HEAP_PLACEHOLDER] = parent[HEAP_PLACEHOLDER].replace(
+                            heap_node[HEAP_CODE], CHILD_PLACEHOLDER.format(node_id), 1
+                        )
+
+                    else:
+                        # replace the first occurrence of the current text in the code
+                        assert HEAP_CODE in parent
+                        if parent[HEAP_CODE]:
+                            parent[HEAP_CODE] = parent[HEAP_CODE].replace(
+                                heap_node[HEAP_CODE],
+                                CHILD_PLACEHOLDER.format(node_id),
+                                1,
+                            )
+                        else:
+                            parent[HEAP_PLACEHOLDER] = parent[HEAP_PLACEHOLDER].replace(
+                                heap_node[HEAP_CODE],
+                                CHILD_PLACEHOLDER.format(node_id),
+                                1,
+                            )
+
             heap.append(heap_node)
-            
+
             if len(tree._fields) > 0:
                 for field in tree._fields:
                     if field not in not_considered_leaves:
-                        _build_heap(tree.__dict__[field], heap, not_considered_leaves, field, heap_node)
+                        _build_heap(
+                            tree.__dict__[field],
+                            source,
+                            positional,
+                            heap,
+                            not_considered_leaves,
+                            field,
+                            heap_node,
+                        )
 
         elif isinstance(tree, tuple) or isinstance(tree, list):
             for element in tree:
-                _build_heap(element, heap, not_considered_leaves, field, parent)
+                _build_heap(
+                    element,
+                    source,
+                    positional,
+                    heap,
+                    not_considered_leaves,
+                    field,
+                    parent,
+                )
 
         else:
             # append to the last inserted node
             if HEAP_VALUE not in heap[-1]:
                 heap[-1][HEAP_VALUE] = {}
             heap[-1][HEAP_VALUE][field] = tree
-    
+
     heap = []
-    _build_heap(ast_tree, heap, not_considered_leaves, None, None)
+    _build_heap(ast_tree, source, positional, heap, not_considered_leaves, None, None)
     return heap
+
+
+def heap2code(heap: list) -> str:
+    """Given an heap generated by ```ast2heap```, return a string representing the original code from wich the heap was originated.
+
+    Args:
+        heap (list): A heap generated with ```astutils.ast2heap()``` with ```source not None``` and ```positional == True```.
+
+    Returns:
+        list: A string representing the original code.
+    """
+
+    NUMBER_PLACEHOLDER_BEG = NUMBER_PLACEHOLDER.split("{")[0]
+    NUMBER_PLACEHOLDER_END = NUMBER_PLACEHOLDER.split("}")[1]
+
+    def _dfs_build(root, heap, parent):
+
+        assert HEAP_CODE in root
+
+        def has_children(node):
+            return HEAP_CHILDREN in node
+
+        # def _update_root_code(root, )
+
+        if has_children(root):
+
+            for heap_node_id in root[HEAP_CHILDREN]:
+
+                assert heap[heap_node_id][HEAP_ID] == heap_node_id
+                partial_source = _dfs_build(heap[heap_node_id], heap, root)
+
+                if root[HEAP_CODE]:
+                    root[HEAP_CODE] = root[HEAP_CODE].replace(
+                        CHILD_PLACEHOLDER.format(heap_node_id), partial_source, 1
+                    )
+                else:
+                    assert root[HEAP_PLACEHOLDER]
+                    root[HEAP_PLACEHOLDER] = root[HEAP_PLACEHOLDER].replace(
+                        CHILD_PLACEHOLDER.format(heap_node_id), partial_source, 1
+                    )
+        else:
+            # is a leaf
+            pass
+
+        # handle numbers to avoid problems during the tree construction
+        def __replace(m):
+            return m.group(0)[
+                len(NUMBER_PLACEHOLDER_BEG) : -len(NUMBER_PLACEHOLDER_END)
+            ]
+
+        if root[HEAP_CODE]:
+            return re.sub(NUMBER_PLACEHOLDER.format(Number), __replace, root[HEAP_CODE])
+        assert root[HEAP_PLACEHOLDER]
+        return re.sub(
+            NUMBER_PLACEHOLDER.format(Number), __replace, root[HEAP_PLACEHOLDER]
+        )
+
+    return _dfs_build(heap[0], heap, None)
+
+
+def heap2tokens(heap: list) -> list:
+    """Given an heap generated by ```ast2heap```, return a list of tuple containing the ordered list of tokens and their indexes.
+
+    Args:
+        heap (list): A heap generated with ```astutils.ast2heap()``` with ```source not None``` and ```positional == True```.
+
+    Returns:
+        list: A list of tuple where each tuple is ```(segment of code, ast_node_id)```.
+    """
+
+    NUMBER_PLACEHOLDER_BEG = NUMBER_PLACEHOLDER.split("{")[0]
+    NUMBER_PLACEHOLDER_END = NUMBER_PLACEHOLDER.split("}")[1]
+    TMP_SEQ_SEPARATOR = ">#@@@§"
+
+    HEAP_TOKENS = "_heap_tokens"
+
+    def _dfs_build(root, heap, parent):
+
+        assert HEAP_CODE in root
+
+        def has_children(node):
+            return HEAP_CHILDREN in node
+
+        def _code2tokens(code, node_id):
+            def __replace_code2tokens(m):
+                return TMP_SEQ_SEPARATOR + m.group(0) + TMP_SEQ_SEPARATOR
+
+            code_l = re.sub(
+                CHILD_PLACEHOLDER.format("[0-9]+"), __replace_code2tokens, code
+            ).split(TMP_SEQ_SEPARATOR)
+            return [(tok, node_id) for tok in code_l if tok != ""]
+
+        if root[HEAP_CODE]:
+            root[HEAP_TOKENS] = _code2tokens(root[HEAP_CODE], root[HEAP_ID])
+        else:
+            root[HEAP_TOKENS] = _code2tokens(root[HEAP_PLACEHOLDER], root[HEAP_ID])
+
+        if has_children(root):
+
+            for heap_node_id in root[HEAP_CHILDREN]:
+
+                assert heap[heap_node_id][HEAP_ID] == heap_node_id
+
+                partial_tokens = _dfs_build(heap[heap_node_id], heap, root)
+                for i in range(len(root[HEAP_TOKENS])):
+
+                    token, node_id = root[HEAP_TOKENS][i]
+                    if token == CHILD_PLACEHOLDER.format(heap_node_id):
+                        root[HEAP_TOKENS] = (
+                            root[HEAP_TOKENS][:i]
+                            + partial_tokens
+                            + root[HEAP_TOKENS][i + 1 :]
+                        )
+                        break
+        else:
+            # is a leaf
+            pass
+
+        # handle numbers to avoid problems during the tree construction
+
+        def __replace(m):
+            return m.group(0)[
+                len(NUMBER_PLACEHOLDER_BEG) : -len(NUMBER_PLACEHOLDER_END)
+            ]
+
+        return [
+            (re.sub(NUMBER_PLACEHOLDER.format(Number), __replace, token), node_id)
+            for token, node_id in root[HEAP_TOKENS]
+        ]
+
+    return _dfs_build(heap[0], heap, None)
+
 
 def heap2ast(heap: list) -> ast.AST:
 
