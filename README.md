@@ -88,5 +88,5 @@ sourcecode = "def hello(name):\n\tprint('hello', name)\nhello('John')\n"
 ast = astutils.ast_parse_from_string(sourcecode)
 heap_ast = astutils.ast2heap(ast, source=sourcecode)
 tokens = astutils.heap2tokens(heap_ast)
-assert(sourcecode == "".join([tok for tok, node_id in tokens]))
+assert(sourcecode == "".join([tok for tok, node_id, node_type in tokens]))
 ```
