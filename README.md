@@ -1,6 +1,6 @@
 # python-ast-utils
 
-Some utility functions used to handle Python AST.
+Some utility functions built on top of the official ```ast``` module of Python.
 
 ## Installation
 
