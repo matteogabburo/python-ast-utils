@@ -14,7 +14,6 @@ def _read(fn, *args):
 
 def ast_parse(
     filename: str,
-    input_text: str = None,
     mode: str = "exec",
     type_comments: bool = False,
     feature_version: Tuple[int, int] = None,
