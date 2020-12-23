@@ -4,6 +4,7 @@ from typing import Tuple, Dict, List
 import re
 from tokenize import Number
 import copy
+import sys
 
 
 def _read(fn, *args):
@@ -68,11 +69,16 @@ def ast_unparse(ast_tree: ast.AST) -> str:
     Args:
         ast_tree (ast.AST): An Abstract Syntax Tree representing a Python program.
 
+    Raises:
+        Exception: If the current python version is < (3,9).
+
     Returns:
         str: A string that represent the code associated with the input Abstract Syntax Tree.
     """
-
-    return ast.unparse(ast_tree)
+    if sys.version_info >= (3, 9):
+        return ast.unparse(ast_tree)
+    else:
+        raise Exception("Not implemented in Python version < 3.9")
 
 
 def ast2dict(ast_tree: ast.AST) -> Dict:

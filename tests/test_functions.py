@@ -3,6 +3,7 @@
 import pytest
 import os
 import astutils
+import sys
 
 RESOURCES_PATH = "./tests/resources"
 MAX_PY_VERSION = (3, 9)
@@ -107,7 +108,11 @@ def test_ast_unparse(fname, mode, type_comments, feature_version):
     ast_tree = astutils.ast_parse(
         fname, mode=mode, type_comments=type_comments, feature_version=feature_version
     )
-    astutils.ast_unparse(ast_tree)
+    if sys.version_info < (3,9):
+        with pytest.raises(Exception):
+            astutils.ast_unparse(ast_tree)
+    else:
+        astutils.ast_unparse(ast_tree)
 
 
 @pytest.mark.parametrize(
