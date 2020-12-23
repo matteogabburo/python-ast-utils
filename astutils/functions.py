@@ -82,7 +82,7 @@ def ast_unparse(ast_tree: ast.AST) -> str:
 
 
 def ast2dict(ast_tree: ast.AST) -> Dict:
-    """Takes in input an Abstract Syntax Tree and return a Dictionary based representation of the code.
+    """Takes in input an Abstract Syntax Tree and return a Dictionary based representation of the code. **WARNING:** the tabulation information will be lost. If these fields are important for you, check ```ast2heap```.
 
     Args:
         ast_tree (ast.AST): An Abstract Syntax Tree representing a Python program.
