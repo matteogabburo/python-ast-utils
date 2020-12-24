@@ -20,13 +20,16 @@ def setup_cfg(args):
     # load config from file and command-line arguments
     cfg = get_cfg()
     from projects.SparseRCNN.sparsercnn import add_sparsercnn_config
+
     add_sparsercnn_config(cfg)
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
     # Set score_threshold for builtin models
     cfg.MODEL.RETINANET.SCORE_THRESH_TEST = args.confidence_threshold
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = args.confidence_threshold
-    cfg.MODEL.PANOPTIC_FPN.COMBINE.INSTANCES_CONFIDENCE_THRESH = args.confidence_threshold
+    cfg.MODEL.PANOPTIC_FPN.COMBINE.INSTANCES_CONFIDENCE_THRESH = (
+        args.confidence_threshold
+    )
     cfg.freeze()
     return cfg
 
@@ -39,7 +42,9 @@ def get_parser():
         metavar="FILE",
         help="path to config file",
     )
-    parser.add_argument("--webcam", action="store_true", help="Take inputs from webcam.")
+    parser.add_argument(
+        "--webcam", action="store_true", help="Take inputs from webcam."
+    )
     parser.add_argument("--video-input", help="Path to video file.")
     parser.add_argument(
         "--input",
@@ -85,11 +90,13 @@ if __name__ == "__main__":
             assert args.input, "The input path(s) was not found"
         for path in tqdm.tqdm(args.input, disable=not args.output):
             # use PIL, to be consistent with evaluation
-#             img = read_image(path, format="BGR")
-            # SparseRCNN uses RGB input as default 
+            #             img = read_image(path, format="BGR")
+            # SparseRCNN uses RGB input as default
             img = read_image(path, format="RGB")
             start_time = time.time()
-            predictions, visualized_output = demo.run_on_image(img, args.confidence_threshold)
+            predictions, visualized_output = demo.run_on_image(
+                img, args.confidence_threshold
+            )
             logger.info(
                 "{}: {} in {:.2f}s".format(
                     path,
@@ -105,7 +112,9 @@ if __name__ == "__main__":
                     assert os.path.isdir(args.output), args.output
                     out_filename = os.path.join(args.output, os.path.basename(path))
                 else:
-                    assert len(args.input) == 1, "Please specify a directory with args.output"
+                    assert (
+                        len(args.input) == 1
+                    ), "Please specify a directory with args.output"
                     out_filename = args.output
                 visualized_output.save(out_filename)
             else:
@@ -149,7 +158,9 @@ if __name__ == "__main__":
                 isColor=True,
             )
         assert os.path.isfile(args.video_input)
-        for vis_frame in tqdm.tqdm(demo.run_on_video(video, args.confidence_threshold), total=num_frames):
+        for vis_frame in tqdm.tqdm(
+            demo.run_on_video(video, args.confidence_threshold), total=num_frames
+        ):
             if args.output:
                 output_file.write(vis_frame)
             else:

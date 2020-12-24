@@ -9,10 +9,9 @@ from matplotlib.cm import get_cmap
 from matplotlib.lines import Line2D
 
 
-def precision_recall_curve(matches: pd.DataFrame,
-                           precision_steps: float = 0.01) -> Tuple[List[float],
-                                                                   List[float],
-                                                                   List[float]]:
+def precision_recall_curve(
+    matches: pd.DataFrame, precision_steps: float = 0.01
+) -> Tuple[List[float], List[float], List[float]]:
     """ Calculate precision recall curve based on minimum similarity between strings
 
     A minimum similarity score might be used to identify
@@ -36,7 +35,7 @@ def precision_recall_curve(matches: pd.DataFrame,
         recall: recall per minimum precision step
         average_precision: average precision per minimum precision step
     """
-    min_precisions = list(np.arange(0., 1 + precision_steps, precision_steps))
+    min_precisions = list(np.arange(0.0, 1 + precision_steps, precision_steps))
     average_precision = []
     recall = []
     similarities = matches.Similarity.values
@@ -53,11 +52,13 @@ def precision_recall_curve(matches: pd.DataFrame,
     return min_precisions, recall, average_precision
 
 
-def visualize_precision_recall(matches: Mapping[str, pd.DataFrame],
-                               min_precisions: Mapping[str, List[float]],
-                               recall: Mapping[str, List[float]],
-                               kde: bool = True,
-                               save_path: str = None):
+def visualize_precision_recall(
+    matches: Mapping[str, pd.DataFrame],
+    min_precisions: Mapping[str, List[float]],
+    recall: Mapping[str, List[float]],
+    kde: bool = True,
+    save_path: str = None,
+):
     """ Visualize the precision recall curve for one or more models
 
     Arguments:
@@ -78,13 +79,13 @@ def visualize_precision_recall(matches: Mapping[str, pd.DataFrame],
     MEDIUM_SIZE = 12
     BIGGER_SIZE = 14
 
-    plt.rc('font', size=SMALL_SIZE)  # controls default text sizes
-    plt.rc('axes', titlesize=SMALL_SIZE)  # fontsize of the axes title
-    plt.rc('axes', labelsize=MEDIUM_SIZE)  # fontsize of the x and y labels
-    plt.rc('xtick', labelsize=SMALL_SIZE)  # fontsize of the tick labels
-    plt.rc('ytick', labelsize=SMALL_SIZE)  # fontsize of the tick labels
-    plt.rc('legend', fontsize=SMALL_SIZE)  # legend fontsize
-    plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
+    plt.rc("font", size=SMALL_SIZE)  # controls default text sizes
+    plt.rc("axes", titlesize=SMALL_SIZE)  # fontsize of the axes title
+    plt.rc("axes", labelsize=MEDIUM_SIZE)  # fontsize of the x and y labels
+    plt.rc("xtick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
+    plt.rc("ytick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
+    plt.rc("legend", fontsize=SMALL_SIZE)  # legend fontsize
+    plt.rc("figure", titlesize=BIGGER_SIZE)  # fontsize of the figure title
 
     if not isinstance(matches, dict):
         matches = {"Model": matches}
@@ -92,20 +93,24 @@ def visualize_precision_recall(matches: Mapping[str, pd.DataFrame],
         recall = {"Model": recall}
 
     # Create single dataset of similarity score for all models
-    distribution_data = [(matches[name].Similarity.values, [name for _ in range(len(matches[name]))]) for name in
-                         matches.keys()]
-    distribution_data = pd.DataFrame(np.hstack(distribution_data).T, columns=["Similarity", "Model"])
+    distribution_data = [
+        (matches[name].Similarity.values, [name for _ in range(len(matches[name]))])
+        for name in matches.keys()
+    ]
+    distribution_data = pd.DataFrame(
+        np.hstack(distribution_data).T, columns=["Similarity", "Model"]
+    )
     distribution_data.Similarity = distribution_data.Similarity.astype(float)
     model_names = list(matches.keys())
 
     # Create layout
-    cmap = get_cmap('Accent')
+    cmap = get_cmap("Accent")
     fig = plt.figure(figsize=(20, 5))
 
     if len(model_names) == 1:
         middle = 0
     else:
-        middle = .1
+        middle = 0.1
 
     if kde:
         widths = [1.5, middle, 1.5]
@@ -124,38 +129,50 @@ def visualize_precision_recall(matches: Mapping[str, pd.DataFrame],
         ax1.plot(min_precisions[model_name], recall[model_name], color=color)
     ax1.set_ylim(bottom=0, top=1)
     ax1.set_xlim(left=0, right=1)
-    ax1.spines['right'].set_visible(False)
-    ax1.spines['top'].set_visible(False)
+    ax1.spines["right"].set_visible(False)
+    ax1.spines["top"].set_visible(False)
     ax1.set_xlabel(r"$\bf{Precision}$" + "\n(Minimum Similarity)")
     ax1.set_ylabel(r"$\bf{Recall}$" + "\n(Percentage Matched)")
-
 
     # Similarity Histogram
     if kde:
         for color, model_name in zip(cmap.colors, model_names):
-            sns.kdeplot(matches[model_name]["Similarity"], fill=True, ax=ax2, color=color)
+            sns.kdeplot(
+                matches[model_name]["Similarity"], fill=True, ax=ax2, color=color
+            )
         ax2.yaxis.set_label_position("right")
         ax2.yaxis.tick_right()
         ax2.set_xlabel(r"$\bf{Similarity}$")
         ax2.set_ylabel("")
         ax2.set_xlim(left=-0, right=1)
-        plt.setp([ax2], title='Score Frequency - KDE')
+        plt.setp([ax2], title="Score Frequency - KDE")
 
     # Titles
     if len(model_names) == 1 and kde:
-        fig.suptitle(f'Score Metrics', size=20, y=1, x=0.5)
-        plt.setp([ax1], title='Precision-Recall Curve')
+        fig.suptitle(f"Score Metrics", size=20, y=1, x=0.5)
+        plt.setp([ax1], title="Precision-Recall Curve")
     elif kde:
-        fig.suptitle('Score Metrics', size=20, y=1, x=0.5)
-        plt.setp([ax1], title='Precision-Recall Curve')
+        fig.suptitle("Score Metrics", size=20, y=1, x=0.5)
+        plt.setp([ax1], title="Precision-Recall Curve")
     else:
-        fig.suptitle('Precision-Recall Curve', size=20, y=1, x=0.45)
+        fig.suptitle("Precision-Recall Curve", size=20, y=1, x=0.45)
 
     # Custom Legend
     if len(model_names) > 1:
-        custom_lines = [Line2D([0], [0], color=color, lw=4) for color, model_name in zip(cmap.colors, model_names)]
-        ax1.legend(custom_lines, model_names, bbox_to_anchor=(1.05, .61, .7, .902), loc=3,
-                   ncol=1, borderaxespad=0., frameon=True, fontsize=10)
+        custom_lines = [
+            Line2D([0], [0], color=color, lw=4)
+            for color, model_name in zip(cmap.colors, model_names)
+        ]
+        ax1.legend(
+            custom_lines,
+            model_names,
+            bbox_to_anchor=(1.05, 0.61, 0.7, 0.902),
+            loc=3,
+            ncol=1,
+            borderaxespad=0.0,
+            frameon=True,
+            fontsize=10,
+        )
 
     if save_path:
         plt.savefig(save_path, dpi=300)

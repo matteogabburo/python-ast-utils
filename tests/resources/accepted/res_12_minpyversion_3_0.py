@@ -27,7 +27,9 @@ class FastRCNNTest(unittest.TestCase):
         feature_pooled = torch.rand(2, box_head_output_size)
         predictions = box_predictor(feature_pooled)
 
-        proposal_boxes = torch.tensor([[0.8, 1.1, 3.2, 2.8], [2.3, 2.5, 7, 8]], dtype=torch.float32)
+        proposal_boxes = torch.tensor(
+            [[0.8, 1.1, 3.2, 2.8], [2.3, 2.5, 7, 8]], dtype=torch.float32
+        )
         gt_boxes = torch.tensor([[1, 1, 3, 3], [2, 2, 6, 6]], dtype=torch.float32)
         proposal = Instances((10, 10))
         proposal.proposal_boxes = Boxes(proposal_boxes)

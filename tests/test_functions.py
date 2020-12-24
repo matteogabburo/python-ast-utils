@@ -5,7 +5,7 @@ import os
 import astutils
 import sys
 
-RESOURCES_PATH = "./tests/resources"
+RESOURCES_PATH = "./tests/resources/accepted"
 MAX_PY_VERSION = (3, 9)
 
 
@@ -34,7 +34,7 @@ def _check_instances(class_a, class_b):
                 return False
 
             elif "__dict__" in dir(d_a[k]):
-                if not check_instances(d_a[k], d_b[k]):
+                if not _check_instances(d_a[k], d_b[k]):
                     return False
 
             elif d_a[k] != d_b[k]:
@@ -42,7 +42,7 @@ def _check_instances(class_a, class_b):
 
         return True
     else:
-        return class_a != class_b
+        return class_a == class_b
 
 
 def _get_resources(folder_path):
@@ -108,7 +108,7 @@ def test_ast_unparse(fname, mode, type_comments, feature_version):
     ast_tree = astutils.ast_parse(
         fname, mode=mode, type_comments=type_comments, feature_version=feature_version
     )
-    if sys.version_info < (3,9):
+    if sys.version_info < (3, 9):
         with pytest.raises(Exception):
             astutils.ast_unparse(ast_tree)
     else:
@@ -157,5 +157,23 @@ def test_ast2heap_heap2tokens(fname, mode, type_comments, feature_version):
     tokens = astutils.heap2tokens(ast_heap)
 
     source_code_1 = "".join([token[0] for token in tokens])
+
+    assert _check_instances(sourcecode, source_code_1)
+
+
+@pytest.mark.parametrize(
+    "fname,mode,type_comments,feature_version", _ast_parse_parameters(RESOURCES_PATH),
+)
+def test_scompone(fname, mode, type_comments, feature_version):
+    ast_tree = astutils.ast_parse(
+        fname, mode=mode, type_comments=type_comments, feature_version=feature_version
+    )
+    sourcecode = _read(fname)
+    ast_heap = astutils.ast2heap(ast_tree, source=sourcecode)
+    sub_heaps = astutils.scompone(ast_heap)
+    rebuilded_heap = [ast_heap[0]] + [
+        node for sub_heap in sub_heaps for node in sub_heap
+    ]
+    source_code_1 = astutils.heap2code(rebuilded_heap)
 
     assert _check_instances(sourcecode, source_code_1)

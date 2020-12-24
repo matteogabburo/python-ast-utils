@@ -1,5 +1,6 @@
 import warnings
-warnings.simplefilter(action='ignore', category=FutureWarning)
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
 
 import numpy as np
 import pandas as pd
@@ -56,16 +57,19 @@ class Embeddings(BaseMatcher):
                         bert_embedding ], min_similarity=0.5)
     ```
     """
-    def __init__(self,
-                 embedding_method: Union[List, None] = None,
-                 min_similarity: float = 0.75,
-                 cosine_method: str = "sparse",
-                 model_id: str = None):
+
+    def __init__(
+        self,
+        embedding_method: Union[List, None] = None,
+        min_similarity: float = 0.75,
+        cosine_method: str = "sparse",
+        model_id: str = None,
+    ):
         super().__init__(model_id)
         self.type = "Embeddings"
 
         if not embedding_method:
-            self.document_embeddings = DocumentPoolEmbeddings([WordEmbeddings('news')])
+            self.document_embeddings = DocumentPoolEmbeddings([WordEmbeddings("news")])
 
         elif isinstance(embedding_method, list):
             self.document_embeddings = DocumentPoolEmbeddings(embedding_method)
@@ -79,11 +83,13 @@ class Embeddings(BaseMatcher):
         self.min_similarity = min_similarity
         self.cosine_method = cosine_method
 
-    def match(self,
-              from_list: List[str],
-              to_list: List[str],
-              embeddings_from: np.ndarray = None,
-              embeddings_to: np.ndarray = None) -> pd.DataFrame:
+    def match(
+        self,
+        from_list: List[str],
+        to_list: List[str],
+        embeddings_from: np.ndarray = None,
+        embeddings_to: np.ndarray = None,
+    ) -> pd.DataFrame:
         """ Matches the two lists of strings to each other and returns the best mapping
 
         Arguments:
@@ -108,9 +114,14 @@ class Embeddings(BaseMatcher):
         if not isinstance(embeddings_to, np.ndarray):
             embeddings_to = self._embed(to_list)
 
-        matches = cosine_similarity(embeddings_from, embeddings_to,
-                                    from_list, to_list,
-                                    self.min_similarity, self.cosine_method)
+        matches = cosine_similarity(
+            embeddings_from,
+            embeddings_to,
+            from_list,
+            to_list,
+            self.min_similarity,
+            self.cosine_method,
+        )
 
         return matches
 

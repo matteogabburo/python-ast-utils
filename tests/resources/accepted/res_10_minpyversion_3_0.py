@@ -8,12 +8,13 @@ from .bg_inpaintor import ResNetInpaintor
 
 class ResidualBlock(nn.Module):
     """Residual Block."""
+
     def __init__(self, in_channel, out_channel):
         super(ResidualBlock, self).__init__()
         self.main = nn.Sequential(
             nn.Conv2d(in_channel, out_channel, kernel_size=3, stride=1, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(in_channel, out_channel, kernel_size=3, stride=1, padding=1)
+            nn.Conv2d(in_channel, out_channel, kernel_size=3, stride=1, padding=1),
         )
 
     def forward(self, x):
@@ -46,7 +47,9 @@ class AdaIN(nn.Module):
         stylized_content = (normalized_content * gamma) + beta
 
         if self.style_fact != 1.0:
-            output = (1 - self.style_fact) * content + self.style_fact * stylized_content
+            output = (
+                1 - self.style_fact
+            ) * content + self.style_fact * stylized_content
         else:
             output = stylized_content
         return output
@@ -66,8 +69,8 @@ class SelfAttentionBlock(nn.Module):
             x (torch.tensor): (N, C, H, W)
         """
 
-        alpha = self.query(q, k)            # (N, ns, 1, H, W)
-        x = torch.sum(alpha * v, dim=1)     # (N, ns, C, H, W) * (N, ns, 1, 1, 1)
+        alpha = self.query(q, k)  # (N, ns, 1, H, W)
+        x = torch.sum(alpha * v, dim=1)  # (N, ns, C, H, W) * (N, ns, 1, 1, 1)
 
         return x
 
@@ -88,8 +91,12 @@ class SelfAttentionBlock(nn.Module):
         q = torch.mean(q, dim=(2, 3))
         k = torch.mean(k, dim=(3, 4))
 
-        alpha = torch.matmul(k.view(bs, ns, -1), q.view(bs, -1).unsqueeze(-1)) / math.sqrt(dk)    # (N, ns, 1))
-        alpha = torch.softmax(alpha, dim=1)             # (N, ns, 1)
+        alpha = torch.matmul(
+            k.view(bs, ns, -1), q.view(bs, -1).unsqueeze(-1)
+        ) / math.sqrt(
+            dk
+        )  # (N, ns, 1))
+        alpha = torch.softmax(alpha, dim=1)  # (N, ns, 1)
         alpha = alpha.unsqueeze(-1).unsqueeze(-1)
 
         return alpha
@@ -132,7 +139,9 @@ class LWB(nn.Module):
         _, _, h, w = x.shape
 
         T_scale = T.permute(0, 3, 1, 2)  # (bs, 2, h, w)
-        T_scale = F.interpolate(T_scale, size=(h, w), mode='bilinear', align_corners=True)
+        T_scale = F.interpolate(
+            T_scale, size=(h, w), mode="bilinear", align_corners=True
+        )
         T_scale = T_scale.permute(0, 2, 3, 1)  # (bs, h, w, 2)
 
         return T_scale
@@ -176,25 +185,27 @@ class SelfAttentionLWB(nn.Module):
         bs, ns, H, W, _ = Tst.shape
         h, w = tsf_x.shape[-2:]
 
-        src_warp = self.lwb(src_x, Tst.view(bs * ns, H, W, 2))         # (bs * ns, c2, h, w)
-        src_warp_k = self.fk(src_warp)         # (bs * ns, c, h, w)
-        src_warp_v = self.fv(src_warp)         # (bs * ns, c, h, w)
+        src_warp = self.lwb(src_x, Tst.view(bs * ns, H, W, 2))  # (bs * ns, c2, h, w)
+        src_warp_k = self.fk(src_warp)  # (bs * ns, c, h, w)
+        src_warp_v = self.fv(src_warp)  # (bs * ns, c, h, w)
 
-        K = [src_warp_k.view(bs, ns, -1, h, w)] # (bs, ns, c, h, w)
-        V = [src_warp_v.view(bs, ns, -1, h, w)] # (bs, ns, c, h, w)
+        K = [src_warp_k.view(bs, ns, -1, h, w)]  # (bs, ns, c, h, w)
+        V = [src_warp_v.view(bs, ns, -1, h, w)]  # (bs, ns, c, h, w)
 
         if self.temporal and temp_x is not None and Ttt is not None:
             nt = Ttt.shape[1]
             # print(temp_x.shape, Ttt.shape)
-            temp_warp = self.lwb(temp_x, Ttt.view(bs * nt, H, W, 2))   # (bs * nt, c, h, w)
-            temp_warp_k = self.fk(temp_warp)   # (bs * nt, c, h, w)
-            temp_warp_v = self.fv(temp_warp)   # (bs * nt, c, h, w)
+            temp_warp = self.lwb(
+                temp_x, Ttt.view(bs * nt, H, W, 2)
+            )  # (bs * nt, c, h, w)
+            temp_warp_k = self.fk(temp_warp)  # (bs * nt, c, h, w)
+            temp_warp_v = self.fv(temp_warp)  # (bs * nt, c, h, w)
 
-            K.append(temp_warp_k.view(bs, nt, -1, h, w))   # (bs, nt, c, h, w)
-            V.append(temp_warp_v.view(bs, nt, -1, h, w))   # (bs, nt, c, h, w)
+            K.append(temp_warp_k.view(bs, nt, -1, h, w))  # (bs, nt, c, h, w)
+            V.append(temp_warp_v.view(bs, nt, -1, h, w))  # (bs, nt, c, h, w)
 
-        K = torch.cat(K, dim=1)     # (bs, ns + nt, c, h, w)
-        V = torch.cat(V, dim=1)     # (bs, ns + nt, c, h, w)
+        K = torch.cat(K, dim=1)  # (bs, ns + nt, c, h, w)
+        V = torch.cat(V, dim=1)  # (bs, ns + nt, c, h, w)
 
         q = self.fq(tsf_x)  # (bs, c, h, w)
 
@@ -220,8 +231,15 @@ class Encoder(nn.Module):
                 c_in = num_filters[i - 1]
 
             block = nn.Sequential(
-                nn.Conv2d(c_in, num_filters[i], kernel_size=3, stride=2, padding=1, bias=use_bias),
-                nn.ReLU(inplace=True)
+                nn.Conv2d(
+                    c_in,
+                    num_filters[i],
+                    kernel_size=3,
+                    stride=2,
+                    padding=1,
+                    bias=use_bias,
+                ),
+                nn.ReLU(inplace=True),
             )
 
             layers.append(block)
@@ -256,8 +274,10 @@ class Decoder(nn.Module):
                 c_in = num_filters[i - 1]
 
             block = nn.Sequential(
-                nn.ConvTranspose2d(c_in, num_filters[i], kernel_size=4, stride=2, padding=1, bias=True),
-                nn.ReLU(inplace=True)
+                nn.ConvTranspose2d(
+                    c_in, num_filters[i], kernel_size=4, stride=2, padding=1, bias=True
+                ),
+                nn.ReLU(inplace=True),
             )
             layers.append(block)
 
@@ -281,17 +301,25 @@ class SkipDecoder(nn.Module):
             else:
                 d_in = dec_num_filters[i - 1]
 
-            upconvs.append(nn.Sequential(
-                nn.ConvTranspose2d(d_in, dec_num_filters[i], kernel_size=4, stride=2, padding=1),
-                nn.ReLU(inplace=True)
-            ))
+            upconvs.append(
+                nn.Sequential(
+                    nn.ConvTranspose2d(
+                        d_in, dec_num_filters[i], kernel_size=4, stride=2, padding=1
+                    ),
+                    nn.ReLU(inplace=True),
+                )
+            )
 
             if i != self.n_down - 1:
                 s_in = enc_num_filters[self.n_down - 2 - i] + dec_num_filters[i]
-                skippers.append(nn.Sequential(
-                    nn.Conv2d(s_in, dec_num_filters[i], kernel_size=3, stride=1, padding=1),
-                    nn.ReLU(inplace=True)
-                ))
+                skippers.append(
+                    nn.Sequential(
+                        nn.Conv2d(
+                            s_in, dec_num_filters[i], kernel_size=3, stride=1, padding=1
+                        ),
+                        nn.ReLU(inplace=True),
+                    )
+                )
 
         self.skippers = nn.Sequential(*skippers)
         self.upconvs = nn.Sequential(*upconvs)
@@ -314,7 +342,7 @@ class SkipDecoder(nn.Module):
 class ResAutoEncoder(nn.Module):
     def __init__(self, in_channel=6, num_filters=(64, 128, 128, 128), n_res_block=4):
         super(ResAutoEncoder, self).__init__()
-        self._name = 'ResAutoEncoder'
+        self._name = "ResAutoEncoder"
 
         # build encoders
         self.encoders = Encoder(in_channel=in_channel, num_filters=num_filters)
@@ -325,16 +353,22 @@ class ResAutoEncoder(nn.Module):
 
         self.res_blocks = nn.Sequential(*res_blocks)
 
-        self.decoders = Decoder(in_channel=num_filters[-1], num_filters=list(reversed(num_filters)))
+        self.decoders = Decoder(
+            in_channel=num_filters[-1], num_filters=list(reversed(num_filters))
+        )
 
         self.img_reg = nn.Sequential(
-            nn.Conv2d(num_filters[0], 3, kernel_size=5, stride=1, padding=2, bias=False),
-            nn.Tanh()
+            nn.Conv2d(
+                num_filters[0], 3, kernel_size=5, stride=1, padding=2, bias=False
+            ),
+            nn.Tanh(),
         )
 
         self.att_reg = nn.Sequential(
-            nn.Conv2d(num_filters[0], 1, kernel_size=5, stride=1, padding=2, bias=False),
-            nn.Sigmoid()
+            nn.Conv2d(
+                num_filters[0], 1, kernel_size=5, stride=1, padding=2, bias=False
+            ),
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
@@ -377,14 +411,16 @@ def build_multi_stage_attlwb(src_num_filters, tsf_num_filters, temporal=True):
             channel_q=tsf_num_filters[i],
             channel_s=src_num_filters[i],
             channel=tsf_num_filters[i],
-            temporal=temporal
+            temporal=temporal,
         )
 
         enc_attlwbs.append(block)
     return enc_attlwbs
 
 
-def build_res_block_attlwb(src_res_channel, tsf_res_channel, n_res_block, temporal=True):
+def build_res_block_attlwb(
+    src_res_channel, tsf_res_channel, n_res_block, temporal=True
+):
     res_attlwbs = nn.ModuleList()
     # Down-Sampling
     for i in range(n_res_block):
@@ -392,7 +428,7 @@ def build_res_block_attlwb(src_res_channel, tsf_res_channel, n_res_block, tempor
             channel_q=tsf_res_channel,
             channel_s=src_res_channel,
             channel=tsf_res_channel,
-            temporal=temporal
+            temporal=temporal,
         )
 
         res_attlwbs.append(block)
@@ -401,24 +437,37 @@ def build_res_block_attlwb(src_res_channel, tsf_res_channel, n_res_block, tempor
 
 class AttentionLWBGenerator(nn.Module):
     def __init__(
-        self, bg_dim=4, src_dim=6, tsf_dim=3,
-        num_filters=(64, 128, 128, 128), n_res_block=4,
-        temporal=True
-
+        self,
+        bg_dim=4,
+        src_dim=6,
+        tsf_dim=3,
+        num_filters=(64, 128, 128, 128),
+        n_res_block=4,
+        temporal=True,
     ):
         super(AttentionLWBGenerator, self).__init__()
-        self.bg_net = ResNetInpaintor(c_dim=bg_dim, num_filters=num_filters, n_res_block=6)
+        self.bg_net = ResNetInpaintor(
+            c_dim=bg_dim, num_filters=num_filters, n_res_block=6
+        )
 
         # build src_net
         num_filters = (64, 128, 256)
-        self.src_net = ResAutoEncoder(in_channel=src_dim, num_filters=num_filters, n_res_block=n_res_block)
+        self.src_net = ResAutoEncoder(
+            in_channel=src_dim, num_filters=num_filters, n_res_block=n_res_block
+        )
 
         # build tsf_net
         self.temporal = temporal
-        self.tsf_net_enc = Encoder(in_channel=tsf_dim, num_filters=num_filters, use_bias=False)
-        self.tsf_net_dec = SkipDecoder(num_filters[-1], num_filters, list(reversed(num_filters)))
+        self.tsf_net_enc = Encoder(
+            in_channel=tsf_dim, num_filters=num_filters, use_bias=False
+        )
+        self.tsf_net_dec = SkipDecoder(
+            num_filters[-1], num_filters, list(reversed(num_filters))
+        )
         self.enc_attlwbs = build_multi_stage_attlwb(num_filters, num_filters, temporal)
-        self.res_attlwbs = build_res_block_attlwb(num_filters[-1], num_filters[-1], n_res_block, temporal)
+        self.res_attlwbs = build_res_block_attlwb(
+            num_filters[-1], num_filters[-1], n_res_block, temporal
+        )
         res_blocks = []
         for i in range(n_res_block):
             res_blocks.append(ResidualBlock(num_filters[-1], num_filters[-1]))
@@ -426,30 +475,41 @@ class AttentionLWBGenerator(nn.Module):
         self.adain = AdaIN()
 
         self.tsf_img_reg = nn.Sequential(
-            nn.Conv2d(num_filters[0], 3, kernel_size=5, stride=1, padding=2, bias=False),
-            nn.Tanh()
+            nn.Conv2d(
+                num_filters[0], 3, kernel_size=5, stride=1, padding=2, bias=False
+            ),
+            nn.Tanh(),
         )
 
         self.tsf_att_reg = nn.Sequential(
-            nn.Conv2d(num_filters[0], 1, kernel_size=5, stride=1, padding=2, bias=False),
-            nn.Sigmoid()
+            nn.Conv2d(
+                num_filters[0], 1, kernel_size=5, stride=1, padding=2, bias=False
+            ),
+            nn.Sigmoid(),
         )
 
     def adaptor_params(self):
-        return list(self.bg_net.parameters()) +      \
-               list(self.tsf_net_enc.parameters()) + \
-               list(self.tsf_net_dec.parameters()) + \
-               list(self.res_blocks.parameters()) +  \
-               list(self.enc_attlwbs.parameters()) + list(self.res_attlwbs.parameters()) + \
-               list(self.tsf_img_reg.parameters()) + list(self.tsf_att_reg.parameters())
+        return (
+            list(self.bg_net.parameters())
+            + list(self.tsf_net_enc.parameters())
+            + list(self.tsf_net_dec.parameters())
+            + list(self.res_blocks.parameters())
+            + list(self.enc_attlwbs.parameters())
+            + list(self.res_attlwbs.parameters())
+            + list(self.tsf_img_reg.parameters())
+            + list(self.tsf_att_reg.parameters())
+        )
 
     def adaptor_att_params(self):
         return list(self.enc_attlwbs.parameters()) + list(self.res_attlwbs.parameters())
 
     def adaptor_params_for_swapper(self):
-        return list(self.bg_net.parameters()) + \
-               list(self.src_net.att_reg.parameters()) + \
-               list(self.enc_attlwbs.parameters()) + list(self.res_attlwbs.parameters())
+        return (
+            list(self.bg_net.parameters())
+            + list(self.src_net.att_reg.parameters())
+            + list(self.enc_attlwbs.parameters())
+            + list(self.res_attlwbs.parameters())
+        )
 
     def forward_bg(self, bg_inputs):
         """
@@ -493,8 +553,16 @@ class AttentionLWBGenerator(nn.Module):
 
             return src_enc_outs, src_res_outs, img, mask
 
-    def forward_tsf(self, tsf_inputs, src_enc_outs, src_res_outs, Tst,
-                    temp_enc_outs=None, temp_res_outs=None, Ttt=None):
+    def forward_tsf(
+        self,
+        tsf_inputs,
+        src_enc_outs,
+        src_res_outs,
+        Tst,
+        temp_enc_outs=None,
+        temp_res_outs=None,
+        Ttt=None,
+    ):
         """
             Processing one time step of tsf stream.
 
@@ -528,7 +596,9 @@ class AttentionLWBGenerator(nn.Module):
                 temp_x = None
 
             # print(q_x.shape, src_x.shape, Tst.shape)
-            x, gamma, beta = self.enc_attlwbs[i](tsf_x, src_x, Tst, temp_x=temp_x, Ttt=Ttt)
+            x, gamma, beta = self.enc_attlwbs[i](
+                tsf_x, src_x, Tst, temp_x=temp_x, Ttt=Ttt
+            )
 
             tsf_x = self.adain(tsf_x, gamma, beta)
             tsf_enc_outs.append(tsf_x)
@@ -541,7 +611,9 @@ class AttentionLWBGenerator(nn.Module):
                 temp_x = temp_res_outs[i]
             else:
                 temp_x = None
-            x, gamma, beta = self.res_attlwbs[i](tsf_x, src_x, Tst, temp_x=temp_x, Ttt=Ttt)
+            x, gamma, beta = self.res_attlwbs[i](
+                tsf_x, src_x, Tst, temp_x=temp_x, Ttt=Ttt
+            )
             tsf_x = self.adain(tsf_x, gamma, beta)
 
         # 3. decoders
@@ -570,7 +642,7 @@ class AttentionLWBGenerator(nn.Module):
         bs, nt, ns, h, w, _ = Tst.shape
 
         # 1. inpaint background
-        bg_img = self.forward_bg(bg_inputs)    # (N, ns or 1, 3, h, w)
+        bg_img = self.forward_bg(bg_inputs)  # (N, ns or 1, 3, h, w)
 
         # 2. process source inputs
         # src_enc_outs: [torch.tensor(bs*ns, c1, h1, w1), tensor.tensor(bs*ns, c2, h2, w2), ... ]
@@ -581,7 +653,9 @@ class AttentionLWBGenerator(nn.Module):
             src_enc_outs, src_res_outs = self.forward_src(src_inputs, only_enc=True)
             src_imgs, src_masks = None, None
         else:
-            src_enc_outs, src_res_outs, src_imgs, src_masks = self.forward_src(src_inputs, only_enc=False)
+            src_enc_outs, src_res_outs, src_imgs, src_masks = self.forward_src(
+                src_inputs, only_enc=False
+            )
 
         # 3. process transform inputs
         tsf_imgs, tsf_masks = [], []
@@ -592,14 +666,23 @@ class AttentionLWBGenerator(nn.Module):
                 _tsf_cond = tsf_inputs[:, t - 1, 0:3]
                 _tsf_img = tsf_imgs[-1] * (1 - tsf_masks[-1])
                 _tsf_inputs = torch.cat([_tsf_img, _tsf_cond], dim=1).unsqueeze_(dim=1)
-                _temp_enc_outs, _temp_res_outs = self.forward_src(_tsf_inputs, only_enc=True)
-                _Ttt = Ttt[:, t-1:t]
+                _temp_enc_outs, _temp_res_outs = self.forward_src(
+                    _tsf_inputs, only_enc=True
+                )
+                _Ttt = Ttt[:, t - 1 : t]
 
             else:
                 _Ttt = None
                 _temp_enc_outs, _temp_res_outs = None, None
-            tsf_img, tsf_mask = self.forward_tsf(t_tsf_inputs, src_enc_outs, src_res_outs,
-                                                 Tst[:, t].contiguous(), _temp_enc_outs, _temp_res_outs, _Ttt)
+            tsf_img, tsf_mask = self.forward_tsf(
+                t_tsf_inputs,
+                src_enc_outs,
+                src_res_outs,
+                Tst[:, t].contiguous(),
+                _temp_enc_outs,
+                _temp_res_outs,
+                _Ttt,
+            )
             tsf_imgs.append(tsf_img)
             tsf_masks.append(tsf_mask)
 
@@ -612,7 +695,7 @@ class AttentionLWBGenerator(nn.Module):
             return bg_img, src_imgs, src_masks, tsf_imgs, tsf_masks
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     alwb_gen = AttentionLWBGenerator(temporal=True, num_filters=3)
 
     bg_inputs = torch.rand(4, 5, 4, 512, 512)
@@ -621,7 +704,8 @@ if __name__ == '__main__':
     Tst = torch.rand(4, 2, 5, 512, 512, 2)
     Ttt = torch.rand(4, 1, 512, 512, 2)
 
-    bg_img, src_img, src_mask, tsf_img, tsf_mask = alwb_gen(bg_inputs, src_inputs, tsf_inputs, Tst, Ttt)
+    bg_img, src_img, src_mask, tsf_img, tsf_mask = alwb_gen(
+        bg_inputs, src_inputs, tsf_inputs, Tst, Ttt
+    )
 
     print(bg_img.shape, src_img.shape, src_mask.shape, tsf_img.shape, tsf_mask.shape)
-
