@@ -90,3 +90,14 @@ heap_ast = astutils.ast2heap(ast, source=sourcecode)
 tokens = astutils.heap2tokens(heap_ast)
 assert(sourcecode == "".join([tok for tok, node_id, node_type in tokens]))
 ```
+
+#### HeapScompone:
+```.py
+import astutils
+sourcecode = "def hello(name):\n\tprint('hello', name)\nhello('John')\n"
+ast = astutils.ast_parse_from_string(sourcecode)
+heap_ast = astutils.ast2heap(ast, source=sourcecode)
+
+sub_heaps = astutils.scompone(heap_ast)
+print("num sub-heaps:", len(sub_heaps))
+```
