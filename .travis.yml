@@ -1,0 +1,21 @@
+language: python
+
+jobs:
+  include:
+    - name: "Python 3.9 on Linux"
+      python: 3.9
+
+  allow_failures:
+    - name: "Python nightly on Linux"
+      python: nightly
+
+before_install:
+  - python --version
+  - pip install -U pip
+  - pip install -U pytest
+
+install:
+  - pip install . --force
+  
+script: 
+  - pytest tests -v
