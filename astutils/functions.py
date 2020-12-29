@@ -416,6 +416,11 @@ def ast2heap(
                     def __replace(m):
                         return NUMBER_PLACEHOLDER.format(m.group(0))
 
+                    if heap_node[HEAP_CODE]:
+                        heap_node[HEAP_CODE] = re.sub(
+                            Number, __replace, heap_node[HEAP_CODE]
+                        )
+
                     if not is_not_root(heap):
                         heap_node[HEAP_CODE] = re.sub(Number, __replace, source)
                         
@@ -568,8 +573,6 @@ def heap2code(heap: list, inplace: bool = False) -> str:
         def has_children(node):
             return HEAP_CHILDREN in node
 
-        # def _update_root_code(root, )
-
         if has_children(root):
 
             for heap_node_id in root[HEAP_CHILDREN]:
@@ -647,14 +650,6 @@ def heap2tokens(heap: list, inplace: bool = False) -> list:
 
         def _code2tokens(code, node_id, node_type):
             
-            """
-            def __replace_code2tokens(m):
-                return TMP_SEQ_SEPARATOR + m.group(0) + TMP_SEQ_SEPARATOR
-
-            code_l = re.sub(
-                CHILD_PLACEHOLDER.format("[0-9]+"), __replace_code2tokens, code
-            ).split(TMP_SEQ_SEPARATOR)
-            """
             code_l = code.replace(CHILD_PLACEHOLDER_BEG, TMP_SEQ_SEPARATOR + CHILD_PLACEHOLDER_BEG).replace(CHILD_PLACEHOLDER_END, CHILD_PLACEHOLDER_END + TMP_SEQ_SEPARATOR).split(TMP_SEQ_SEPARATOR)
 
             return [(tok, node_id, node_type) for tok in code_l if tok != ""]
@@ -683,12 +678,14 @@ def heap2tokens(heap: list, inplace: bool = False) -> list:
 
                     token, _, _ = root[HEAP_TOKENS][i]
                     if token == CHILD_PLACEHOLDER.format(heap_node_id):
+  
                         root[HEAP_TOKENS] = (
                             root[HEAP_TOKENS][:i]
                             + partial_tokens
                             + root[HEAP_TOKENS][i + 1 :]
                         )
                         break
+
         else:
             # is a leaf
             pass
