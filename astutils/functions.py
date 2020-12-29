@@ -224,10 +224,11 @@ HEAP_TYPE = "_heap_type"
 HEAP_VALUE = "_heap_value"
 HEAP_CODE = "_heap_code"
 HEAP_PLACEHOLDER = "_heap_placeholder"
-CHILD_PLACEHOLDER = "<child_id={}>"
-NUMBER_PLACEHOLDER = "<number={}>"
+CHILD_PLACEHOLDER = "<child={}><dlihc>"
+NUMBER_PLACEHOLDER = "<num={}><mun>"
 HEAP_TOKENS = "_heap_tokens"
 TMP_SEQ_SEPARATOR = ">#@>@@§"
+SOURCE_MAP_CHUNKS_SIZE = 128
 
 
 def build_source_map(source: str) -> Dict[int, str]:
@@ -243,8 +244,15 @@ def build_source_map(source: str) -> Dict[int, str]:
     lines = source.split("\n")
     source_map = {}
     for lineno, line in enumerate(lines):
-        source_map[lineno + 1] = line + "\n"
 
+        source_map[lineno + 1] = [line[i:i+SOURCE_MAP_CHUNKS_SIZE] for i in range(0, len(line), SOURCE_MAP_CHUNKS_SIZE)]
+
+        if len(source_map[lineno + 1]) > 0 and len(source_map[lineno + 1][-1]) < SOURCE_MAP_CHUNKS_SIZE:
+            source_map[lineno + 1][-1] += "\n"
+        else:
+            source_map[lineno + 1].append("\n")
+        
+        
     return source_map
 
 
@@ -265,6 +273,29 @@ def get_source_segment(
         str: A string that represents the input tree.
     """
 
+    def _get_tokens(line, col_offset=None, end_col_offset=None):
+
+        
+        buck_col_offset = 0
+        buck_end_col_offset = len(line) - 1
+
+        # get the right x of the source_map
+        if col_offset is not None:
+            buck_col_offset, col_offset = col_offset // SOURCE_MAP_CHUNKS_SIZE,  col_offset % SOURCE_MAP_CHUNKS_SIZE
+
+        if end_col_offset is not None:
+            buck_end_col_offset, end_col_offset =  end_col_offset // SOURCE_MAP_CHUNKS_SIZE, end_col_offset % SOURCE_MAP_CHUNKS_SIZE 
+
+        pieces = [line[i] for i in range(buck_col_offset, buck_end_col_offset+1)] # line[buck_col_offset: buck_end_col_offset+1]
+
+        if col_offset:
+            pieces[0] = pieces[0][col_offset:]
+        
+        if end_col_offset:
+            pieces[-1] = pieces[-1][:end_col_offset]
+
+        return ''.join(pieces)
+    
     if isinstance(tree, ast.AST):
 
         dict_tree = tree.__dict__
@@ -276,18 +307,19 @@ def get_source_segment(
             end_col_offset = dict_tree["end_col_offset"]
 
             if end_lineno == lineno:
-                return source_map[lineno][col_offset:end_col_offset]
+                return _get_tokens(source_map[lineno], col_offset, end_col_offset)
 
-            ret = [source_map[i] for i in range(lineno, end_lineno + 1)]
+            ret = [source_map[i][0] for i in range(lineno, end_lineno+1)]
+            
             if not padded:
-                ret[0] = ret[0][col_offset:]
+                ret[0] = _get_tokens(ret[0], col_offset=col_offset)
             else:
+                span = _get_tokens(ret[0], col_offset=col_offset)
+                if not span.isspace():
+                    ret[0] = " " * col_offset + span
 
-                if not ret[0][:col_offset].isspace():
-                    ret[0] = " " * col_offset + ret[0][col_offset:]
-
-            ret[-1] = ret[-1][:end_col_offset]
-
+            ret[-1] = _get_tokens(ret[-1], end_col_offset=end_col_offset)
+                
             return "".join(ret)
 
         else:
@@ -325,6 +357,8 @@ def ast2heap(
     Returns:
         List: An heap representing the input AST.
     """
+
+    CHILD_PLACEHOLDER_BEG = CHILD_PLACEHOLDER.split('{')[0]
 
     def _build_heap(
         tree: ast.AST,
@@ -366,30 +400,25 @@ def ast2heap(
                         return HEAP_PLACEHOLDER in node
 
                     def __put_code_placeholder(source, to_replace, node_id):
+
                         def __find_separator(m):
                             return m.group(0) + TMP_SEQ_SEPARATOR
 
-                        code_l = re.sub(
-                            CHILD_PLACEHOLDER.format("[0-9]+"), __find_separator, source
-                        ).split(TMP_SEQ_SEPARATOR)
+                        code_l = source.split(CHILD_PLACEHOLDER_BEG)
 
                         code_l[-1] = code_l[-1].replace(
                             to_replace, CHILD_PLACEHOLDER.format(node_id), 1
                         )
 
-                        return "".join(code_l)
+                        return CHILD_PLACEHOLDER_BEG.join(code_l)
 
                     # handle numbers to avoid problems during the tree construction
                     def __replace(m):
                         return NUMBER_PLACEHOLDER.format(m.group(0))
 
-                    if heap_node[HEAP_CODE]:
-                        heap_node[HEAP_CODE] = re.sub(
-                            Number, __replace, heap_node[HEAP_CODE]
-                        )
-
                     if not is_not_root(heap):
                         heap_node[HEAP_CODE] = re.sub(Number, __replace, source)
+                        
 
                     elif is_node_abstract(heap_node) and is_not_root(heap):
 
@@ -596,6 +625,8 @@ def heap2tokens(heap: list, inplace: bool = False) -> list:
 
     NUMBER_PLACEHOLDER_BEG = NUMBER_PLACEHOLDER.split("{")[0]
     NUMBER_PLACEHOLDER_END = NUMBER_PLACEHOLDER.split("}")[1]
+    CHILD_PLACEHOLDER_BEG = CHILD_PLACEHOLDER.split('{')[0]
+    CHILD_PLACEHOLDER_END = CHILD_PLACEHOLDER.split('}')[1]
 
     if not inplace:
         # make a copy of the input heap and work on it
@@ -615,12 +646,17 @@ def heap2tokens(heap: list, inplace: bool = False) -> list:
             return HEAP_CHILDREN in node
 
         def _code2tokens(code, node_id, node_type):
+            
+            """
             def __replace_code2tokens(m):
                 return TMP_SEQ_SEPARATOR + m.group(0) + TMP_SEQ_SEPARATOR
 
             code_l = re.sub(
                 CHILD_PLACEHOLDER.format("[0-9]+"), __replace_code2tokens, code
             ).split(TMP_SEQ_SEPARATOR)
+            """
+            code_l = code.replace(CHILD_PLACEHOLDER_BEG, TMP_SEQ_SEPARATOR + CHILD_PLACEHOLDER_BEG).replace(CHILD_PLACEHOLDER_END, CHILD_PLACEHOLDER_END + TMP_SEQ_SEPARATOR).split(TMP_SEQ_SEPARATOR)
+
             return [(tok, node_id, node_type) for tok in code_l if tok != ""]
 
         if root[HEAP_CODE]:
@@ -658,14 +694,9 @@ def heap2tokens(heap: list, inplace: bool = False) -> list:
             pass
 
         # handle numbers to avoid problems during the tree construction
-        def __replace(m):
-            return m.group(0)[
-                len(NUMBER_PLACEHOLDER_BEG) : -len(NUMBER_PLACEHOLDER_END)
-            ]
-
         return [
             (
-                re.sub(NUMBER_PLACEHOLDER.format(Number), __replace, token),
+                token.replace(NUMBER_PLACEHOLDER_BEG, "").replace(NUMBER_PLACEHOLDER_END, ""),
                 node_id,
                 node_type,
             )
