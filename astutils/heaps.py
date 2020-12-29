@@ -1,221 +1,8 @@
 import ast
-import json
-from typing import Tuple, Dict, List
+from typing import Dict, List
 import re
 from tokenize import Number
 import copy
-import sys
-import time
-
-
-def _read(fn, *args):
-    kwargs = {"encoding": "iso-8859-1"}
-    with open(fn, *args, **kwargs) as f:
-        return f.read()
-
-
-def _measure_time(func, *args, **kwargs):
-    """Utility function"""
-
-    time_beg = time.time()
-    ret = func(*args, **kwargs)
-    time_end = time.time()
-
-    return ret, time_end - time_beg
-
-
-def ast_parse(
-    filename: str,
-    mode: str = "exec",
-    type_comments: bool = False,
-    feature_version: Tuple[int, int] = None,
-) -> ast.AST:
-    """Takes in input the path to a Python file, and return an Abstract Syntax Tree.
-
-    Args:
-        filename (str): Path to a Python file
-        mode (str, optional): Can be 'exec' or 'func_type'. if mode is 'func_type', the input syntax is modified to correspond to PEP 484 “signature type comments”. Defaults to 'exec'.
-        type_comments (bool, optional): If type_comments=True is given, the parser is modified to check and return type comments as specified by PEP 484 and PEP 526. Defaults to False.
-        feature_version (Tuple[int, int], optional): A tuple (major, minor) (for example (3, 4)) used to decide which version of the Python grammar to use during the parsing. Defaults to None.
-
-    Returns:
-        ast.AST: The Abstract Syntax Tree obtained by the input Python file.
-    """
-
-    return ast.parse(
-        _read(filename),
-        mode=mode,
-        type_comments=type_comments,
-        feature_version=feature_version,
-    )
-
-
-def ast_parse_from_string(
-    source: str,
-    input_text: str = None,
-    mode: str = "exec",
-    type_comments: bool = False,
-    feature_version: Tuple[int, int] = None,
-) -> ast.AST:
-    """Takes in input the path to a Python file, and return an Abstract Syntax Tree.
-
-    Args:
-        source (str): A string representing a Python source code.
-        mode (str, optional): Can be 'exec' or 'func_type'. if mode is 'func_type', the input syntax is modified to correspond to PEP 484 “signature type comments”. Defaults to 'exec'.
-        type_comments (bool, optional): If type_comments=True is given, the parser is modified to check and return type comments as specified by PEP 484 and PEP 526. Defaults to False.
-        feature_version (Tuple[int, int], optional): A tuple (major, minor) (for example (3, 4)) used to decide which version of the Python grammar to use during the parsing. Defaults to None.
-
-    Returns:
-        ast.AST: The Abstract Syntax Tree obtained by the input Python file.
-    """
-
-    return ast.parse(
-        source, mode=mode, type_comments=type_comments, feature_version=feature_version
-    )
-
-
-def ast_unparse(ast_tree: ast.AST) -> str:
-    """Takes in input an Abstract Syntax Tree and return the string representation of the code.
-
-    Args:
-        ast_tree (ast.AST): An Abstract Syntax Tree representing a Python program.
-
-    Raises:
-        Exception: If the current python version is < (3,9).
-
-    Returns:
-        str: A string that represent the code associated with the input Abstract Syntax Tree.
-    """
-    if sys.version_info >= (3, 9):
-        return ast.unparse(ast_tree)
-    else:
-        raise Exception("Not implemented in Python version < 3.9")
-
-
-def ast2dict(ast_tree: ast.AST) -> Dict:
-    """Takes in input an Abstract Syntax Tree and return a Dictionary based representation of the code. **WARNING:** the tabulation information will be lost. If these fields are important for you, check ```ast2heap```.
-
-    Args:
-        ast_tree (ast.AST): An Abstract Syntax Tree representing a Python program.
-
-    Returns:
-        Dict: A Dictionary represintig the input Abstract Syntax Tree.
-    """
-
-    if isinstance(ast_tree, ast.AST):
-
-        class_name = ast_tree.__class__.__name__
-
-        if len(ast_tree._fields) > 0:
-            ret = {class_name: {}}
-            for field in ast_tree._fields:
-                ret[class_name][field] = ast2dict(ast_tree.__dict__[field])
-        else:
-            ret = class_name
-
-    elif isinstance(ast_tree, list):
-        ret = []
-        for element in ast_tree:
-            ret.append(ast2dict(element))
-    else:
-        ret = ast_tree
-
-    return ret
-
-
-def ducktype_ast_class(d: Dict, name: str) -> bool:
-    """Takes in input a dictionary, and check if it could be converted to and ast.AST subclass.
-
-    Args:
-        d (Dict): A Dictionary.
-        name (str): The name of the field.
-
-    Returns:
-        bool: flag
-    """
-
-    def is_sublist(lst1, lst2):
-        def get_all_in(one, another):
-            for element in one:
-                if element in another:
-                    yield element
-
-        for x1, x2 in zip(get_all_in(lst1, lst2), get_all_in(lst2, lst1)):
-            if x1 != x2:
-                return False
-        return True
-
-    if isinstance(d[name], dict) and name in dir(ast):
-        if is_sublist(d[name].keys(), getattr(ast, name)._fields):
-            return True
-    return False
-
-
-def dict2ast(d: Dict) -> ast.AST:
-    """Takes in input a Dictionary representing a Python program and return an Abstract Syntax Tree.
-
-    Args:
-        d (Dict): A Dictionary representing a Python program.
-
-    Raises:
-        Exception: If the input structure is wrong.
-
-    Returns:
-        ast.AST: The Abstract Syntax Tree obtained by the input Python file.
-    """
-
-    if isinstance(d, dict):
-        ret = []
-        for k in d:
-            if ducktype_ast_class(d, k):
-
-                Class = getattr(ast, k)
-                kwargs = {}
-                for subk in d[k]:
-                    kwargs[subk] = dict2ast(d[k][subk])
-                ret.append(Class(**kwargs))
-            else:
-                raise Exception
-        if len(ret) == 1:
-            return ret[0]
-        else:
-            return ret
-
-    elif isinstance(d, list):
-        ret = []
-        for element in d:
-            ret.append(dict2ast(element))
-        return ret
-
-    else:
-        return d
-
-
-def dict2json(d: Dict) -> json:
-    """Takes in input a Dictionary representing a Python program and return a Json string.
-
-    Args:
-        d (Dict): A Dictionary representing a Python program.
-
-    Returns:
-        json: A Json string representing the input Python program.
-    """
-
-    return json.dumps(d)
-
-
-def ast2json(ast_tree: ast.AST) -> json:
-    """Takes in input an Abstract Syntax Tree representing a Python program and return a Json string.
-
-    Args:
-        ast_tree (ast.AST): An Abstract Syntax Tree representing a Python program.
-
-    Returns:
-        json: A Json string representing the input Python program.
-    """
-
-    return json.dumps(ast2dict(ast_tree))
-
 
 # heap global strings
 HEAP_ID = "_heap_id"
@@ -229,6 +16,206 @@ NUMBER_PLACEHOLDER = "<num={}><mun>"
 HEAP_TOKENS = "_heap_tokens"
 TMP_SEQ_SEPARATOR = ">#@>@@§"
 SOURCE_MAP_CHUNKS_SIZE = 128
+CHILD_PLACEHOLDER_BEG = CHILD_PLACEHOLDER.split('{')[0]
+CHILD_PLACEHOLDER_END = CHILD_PLACEHOLDER.split('}')[1]
+
+NUMBER_PLACEHOLDER_BEG = NUMBER_PLACEHOLDER.split("{")[0]
+NUMBER_PLACEHOLDER_END = NUMBER_PLACEHOLDER.split("}")[1]
+CHILD_PLACEHOLDER_BEG = CHILD_PLACEHOLDER.split('{')[0]
+CHILD_PLACEHOLDER_END = CHILD_PLACEHOLDER.split('}')[1]
+
+
+def get_class_name(item):
+    return item.__class__.__name__
+
+
+class HeapNode:
+
+    def __init__(self, node_id, parent, node_type, node_value=None, code=None, children=[]):
+        
+        self.node_id = node_id
+        self.node_type = node_type
+        self.node_value = node_value
+        self.children = children
+        self.parent = parent
+        self.code = code
+        self.placeholder = None
+
+        self.depth = 0 if self.parent is None else self.parent.depth + 1
+        self.walk = [node_id] if self.parent is None else self.parent.walk + [node_id]
+
+    def is_root(self):
+        return True if self.parent is None else False
+
+    def is_abstract(self):
+        return True if self.code is None else False
+
+    def add_child(self, node_id):
+        
+        self.children.append(node_id)
+
+    def add_child_to_parent(self, node_id):
+
+        if self.parent:
+            self.parent.add_child(node_id)
+
+    def add_value(self, field, value):
+
+        if self.node_value is None:
+            self.node_value = {}
+        self.node_value[field] = value
+
+    def add_code_segment(self, code_segment):
+        
+        self.code = code_segment
+
+    def copy_code_from_parent(self):
+
+        if not self.is_root():
+            
+            if self.is_abstract() and self.parent.is_abstract():
+                self.placeholder = self.parent.placeholder
+
+            elif self.is_abstract() and not self.parent.is_abstract():
+                self.placeholder = self.parent.code
+    
+    @staticmethod
+    def _update_code(source, to_replace, node_id):
+
+        code_l = source.split(CHILD_PLACEHOLDER_BEG)
+        code_l[-1] = code_l[-1].replace(
+            to_replace, CHILD_PLACEHOLDER.format(node_id), 1
+        )
+        return CHILD_PLACEHOLDER_BEG.join(code_l)
+
+    def update_parent(self):
+            
+        if not self.is_root():
+            
+            if not self.is_abstract() and self.parent.is_abstract():
+                self.parent.placeholder = self._update_code(self.parent.placeholder, self.code, self.node_id)
+
+            elif not self.is_abstract() and not self.parent.is_abstract():
+                self.parent.code = self._update_code(self.parent.code, self.code, self.node_id)
+
+    def setup_code(self):
+
+        if not self.is_root():
+            
+            if self.is_abstract() and self.parent.is_abstract():
+                self.placeholder = self.parent.placeholder
+
+            elif self.is_abstract() and not self.parent.is_abstract():
+                self.placeholder = self.parent.code
+            
+            elif not self.is_abstract() and self.parent.is_abstract():
+                self.parent.placeholder = self._update_code(self.parent.placeholder, self.code, self.node_id)
+
+            elif not self.is_abstract() and not self.parent.is_abstract():
+                self.parent.code = self._update_code(self.parent.code, self.code, self.node_id)
+
+    def anonimize_numbers(self, regex_pattern):
+        
+         # handle numbers to avoid problems during the tree construction
+        def _replace(m):
+            return NUMBER_PLACEHOLDER.format(m.group(0))
+
+        if self.code:
+            self.code = regex_pattern.sub( _replace, self.code)
+
+
+class Heap:
+
+    def __init__(self, ast_tree: ast.AST, source=None, positional=True, not_considered_leaves=[], padded=True):
+
+        self.numbers_pattern = re.compile(Number)
+
+        self._ast_tree = ast_tree
+        self._source = source
+        self._heap = []
+
+        self.source_map = None
+        if source:
+            # build the source map
+            self.source_map = build_source_map(source)
+
+        self.positional = positional
+        self.padded = padded 
+        self.not_considered_leaves = not_considered_leaves
+
+        # build the heap
+        self._build_heap(ast_tree,source,None,None)
+
+    def _build_heap(self, tree: ast.AST, source, field, parent):
+
+        if isinstance(tree, ast.AST):
+            """ Is an AST intermediate node"""
+
+            # get the node id
+            node_id = len(self._heap)
+
+            # new node
+            heap_node = HeapNode(node_id, parent, get_class_name(tree))
+
+            # add the current node to the children list of its parent
+            heap_node.add_child_to_parent(node_id)
+
+            """
+            BEG CRITICAL (efficiency)
+            """
+
+            if self._source:
+                heap_node.add_code_segment(get_source_segment(self.source_map, tree, padded=self.padded))
+
+                # replace segments of code of children nodes with some alias
+                if self.positional:
+
+                    if heap_node.is_root():
+                        heap_node.add_code_segment(source)
+            
+                    heap_node.anonimize_numbers(self.numbers_pattern)
+                    heap_node.setup_code()
+
+            """
+            END CRITICAL (efficiency)
+            """
+
+            # add the new node to the heap
+            self._heap.append(heap_node)
+
+            # if has some children and the type of the cildren is accepted,
+            # then continue to build the heap
+            if len(tree._fields) > 0:
+                for field in tree._fields:
+                    if field not in self.not_considered_leaves:
+                        self._build_heap(tree.__dict__[field],source, field, heap_node)
+
+
+        elif isinstance(tree, tuple) or isinstance(tree, list):
+            """ Is a list or a tuple of something  """
+
+            for element in tree:
+                self._build_heap(element,source, field, parent)
+
+        else:
+            """ Is a leaf """
+            parent.add_value(field, tree)
+
+    def get_heap_tuples(self):
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def build_source_map(source: str) -> Dict[int, str]:
@@ -359,6 +346,7 @@ def ast2heap(
     """
 
     CHILD_PLACEHOLDER_BEG = CHILD_PLACEHOLDER.split('{')[0]
+    numbers_pattern = re.compile(Number)
 
     def _build_heap(
         tree: ast.AST,
@@ -417,13 +405,14 @@ def ast2heap(
                         return NUMBER_PLACEHOLDER.format(m.group(0))
 
                     if heap_node[HEAP_CODE]:
-                        heap_node[HEAP_CODE] = re.sub(
+                        """heap_node[HEAP_CODE] = re.sub(
                             Number, __replace, heap_node[HEAP_CODE]
-                        )
+                        )"""
+                        heap_node[HEAP_CODE] = numbers_pattern.sub( __replace, heap_node[HEAP_CODE])
 
                     if not is_not_root(heap):
-                        heap_node[HEAP_CODE] = re.sub(Number, __replace, source)
-                        
+                        #heap_node[HEAP_CODE] = re.sub(Number, __replace, source)
+                        heap_node[HEAP_CODE] = numbers_pattern.sub( __replace, source)
 
                     elif is_node_abstract(heap_node) and is_not_root(heap):
 
@@ -444,6 +433,7 @@ def ast2heap(
                         # replace the first occurrence of the current text in the code
                         assert HEAP_CODE in parent
                         if parent[HEAP_CODE]:
+
                             parent[HEAP_CODE] = __put_code_placeholder(
                                 parent[HEAP_CODE], heap_node[HEAP_CODE], node_id
                             )
