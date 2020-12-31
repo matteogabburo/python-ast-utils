@@ -37,10 +37,14 @@ class CodeSegment:
 
         self.segments = None
         self.positions = None
+        self.tokenized_segments = None
         
         self._segments_map = {}
+        self._tokenized_segments_map = {}
         self._positions_map = {}
         self._type_map = {}
+
+        self.n_tokenized_tokens = None
 
     @staticmethod
     def _mask_numbers(code, regex_pattern):
@@ -59,17 +63,22 @@ class CodeSegment:
         if self.code_segment:
             self.code_segment = self._mask_numbers(self.code_segment, regex_pattern)
 
-    def make_segments(self, regex_pattern):
+    @staticmethod
+    def _get_segments(code, regex_pattern):
 
         def _replace(m):
             return TMP_SEQ_SEPARATOR + m.group(0) + TMP_SEQ_SEPARATOR
 
         pieces = []
-        for piece in regex_pattern.sub( _replace, self.code_segment).split(TMP_SEQ_SEPARATOR):
+        for piece in regex_pattern.sub( _replace, code).split(TMP_SEQ_SEPARATOR):
             if piece != '':
                 pieces.append(piece)
 
-        self.segments = pieces
+        return pieces
+
+    def make_segments(self, regex_pattern):
+        
+        self.segments =  self._get_segments(self.code_segment, regex_pattern)
 
     def replace_next(self, sep, to_replace, node_id, node_type):
 
@@ -97,6 +106,7 @@ class CodeSegment:
             if segment in self._segments_map:
 
                 if heap:
+
                     # build tuples recursively
                     child_id = self._positions_map[segment]
                     resolved += (heap[child_id].get_tuple(heap=heap))
@@ -120,10 +130,66 @@ class CodeSegment:
 
         return resolved
 
+    def resolve_tokenized_tuple(self, heap, node_id=None, node_type=None):
 
+        resolved = []
+
+        def _build_tuple(segment):
+            curr_tuple = [segment]
+            if node_id:
+                curr_tuple.append(node_id)
+            if node_type:
+                curr_tuple.append(node_type) 
+            
+            return curr_tuple
+                
+        for segment in self.tokenized_segments:
+
+            # is a key for the map vocabulary
+            if isinstance(segment, str) and segment in self._tokenized_segments_map:
+                
+                if heap:
+                    # build tuples recursively
+                    child_id = self._positions_map[segment]
+                    resolved += (heap[child_id].get_tokenized_tuple(heap=heap))
+                    
+                else:
+                    raise NotImplementedError("Initialize the heap parameter")
+
+            else:
+                if isinstance(segment, str):
+                    resolved.append(_build_tuple(segment))
+
+                elif isinstance(segment, list): 
+                    for sub_seq in segment:
+                        resolved.append(_build_tuple(sub_seq))
+
+        return resolved
+
+    def tokenize(self, regex_pattern, fn_tokenize, *args, **kwargs):
+
+        counter = 0
+
+        for segment in self.segments:
+            
+            if segment not in self._segments_map:
+
+                if self.tokenized_segments is None:
+                    self.tokenized_segments = []
+                self.tokenized_segments.append(fn_tokenize(self._unmask_numbers(segment), *args, **kwargs))
+                counter += len(self.tokenized_segments[-1])
+
+            else:
+                self._tokenized_segments_map[segment] = [fn_tokenize(sub_seq, *args, **kwargs) for sub_seq in self._get_segments(self._unmask_numbers(self._segments_map[segment]), regex_pattern)]
+                if self.tokenized_segments is None:
+                    self.tokenized_segments = []
+                self.tokenized_segments.append(segment)
+
+        self.n_tokenized_tokens = counter
+            
 class HeapNode:
 
-    def __init__(self, node_id, parent, node_type, node_value=None, code=None, children=[]):
+    def __init__(self, node_id, parent, node_type, node_value=None, code=None, children=None):
         
         self.node_id = node_id
         self.node_type = node_type
@@ -133,11 +199,69 @@ class HeapNode:
         self.code = code
         self.placeholder = None
 
-        self.depth = 0 if self.parent is None else self.parent.depth + 1
-        self.walk = [node_id] if self.parent is None else self.parent.walk + [node_id]
+        self.abstract_depth = 0 if self.parent is None else self.parent.abstract_depth + 1
+        self.abstract_walk = [node_id] if self.parent is None else self.parent.abstract_walk + [node_id]
+        self.depth = None
+        self.walk = None
 
         self._size_tree = 1
         
+        self._is_tokenized=False
+        self._n_tokenized_tokens=None
+        self._ntokens_count_updated = False
+        
+    def update_depth(self):
+
+        if not self.is_abstract():
+            self.depth = 0 if self.parent is None else self.parent.depth + 1
+        else:
+            self.depth = 0 if self.parent is None else self.parent.depth 
+    
+    def update_walk(self):
+
+        if not self.is_abstract():
+            self.walk = [self.node_id] if self.parent is None else self.parent.walk + [self.node_id]
+        else:
+            self.walk = [self.node_id] if self.parent is None else self.parent.walk
+
+    def is_tokenized(self):
+        return self._is_tokenized
+
+    def get_walk(self):
+        return self.walk
+
+    def _add_ntokens(self, ntokens):
+
+        if not self.is_abstract():
+            if self._n_tokenized_tokens is None:
+                self._n_tokenized_tokens = ntokens
+            else:
+                self._n_tokenized_tokens += ntokens
+
+    def update_ntokens(self):
+
+        if not self.is_abstract() and not self._ntokens_count_updated:
+        
+            self._add_ntokens(self.code.n_tokenized_tokens)
+            self._ntokens_count_updated = True
+
+            def _update_parent_node(candidate, ntokens):
+
+                if candidate is None or candidate.is_root():
+                    # root reached
+                    return None
+                
+                candidate = candidate.parent
+                while candidate.is_abstract():
+                    candidate = candidate.parent 
+                
+                candidate._add_ntokens(ntokens)
+                return candidate
+
+            candidate = self
+            while candidate is not None:
+                candidate = _update_parent_node(candidate, self.code.n_tokenized_tokens)
+
     def size_tree(self):
         return self._size_tree
 
@@ -162,6 +286,8 @@ class HeapNode:
 
     def add_child(self, node_id):
         
+        if self.children is None:
+            self.children = []
         self.children.append(node_id)
 
     def add_child_to_parent(self, node_id):
@@ -203,6 +329,9 @@ class HeapNode:
         if self.code:
             self.code.anonimize_numbers(regex_pattern)
 
+    def num_tokenized_tokens(self):
+        return self._n_tokenized_tokens
+
     def make_segments(self, regex_pattern):
 
         if self.code:
@@ -211,7 +340,16 @@ class HeapNode:
     def get_tuple(self, heap=None):
 
         return self.code.resolve_tuple(self.node_id, self.node_type,  heap=heap) 
+    
+    def get_tokenized_tuple(self, heap):
 
+        return self.code.resolve_tokenized_tuple(heap, self.node_id, self.node_type) 
+
+    def tokenize(self, regex_pattern, fn_tokenize, *args, force=False, **kwargs):
+
+        if not self.is_abstract() and (not self.is_tokenized() or force):
+            self.code.tokenize(regex_pattern, fn_tokenize, *args, **kwargs)
+            self._is_tokenized = True
 
 class HeapCapsule():
 
@@ -231,7 +369,13 @@ class HeapCapsule():
 
 class Heap:
 
-    def __init__(self, ast_tree: ast.AST=None, source=None, positional=True, not_considered_leaves=[], padded=True, heap_capsule=None):
+    def __init__(self, ast_tree: ast.AST=None,
+                 source=None,
+                 positional=True, 
+                 not_considered_leaves=[], 
+                 padded=True, 
+                 heap_capsule=None
+                 ):
 
         if heap_capsule is None:
             assert ast_tree is not None
@@ -317,6 +461,10 @@ class Heap:
                     heap_node.anonimize_numbers(self._get_numbers_pattern())
                     heap_node.setup_code()
 
+                    # update walk and depth
+                    heap_node.update_walk()
+                    heap_node.update_depth()
+
             """
             END CRITICAL (efficiency)
             """
@@ -368,6 +516,10 @@ class Heap:
     def get_heap_tuples(self):
         return self.get_root().get_tuple(heap=self._get_heap())
 
+    def get_heap_tokenized_tuples(self, fn_tokenize, *args, **kwargs):
+        self.get_root().tokenize(self._get_child_pattern(), fn_tokenize=fn_tokenize, *args, **kwargs)
+        return self.get_root().get_tokenized_tuple(heap=self._get_heap())
+
     def get_subtree(self, node_id):
         
         if node_id in self._get_heap():
@@ -378,7 +530,7 @@ class Heap:
     def get_size(self):
         return self.get_root().size_tree()
 
-    def scompone(self, min_size=1, max_size=None):
+    def decompose(self, min_size=1, max_size=None, measure='nnodes'):
         
         if max_size is None:
             max_size = self.get_size()
@@ -386,12 +538,104 @@ class Heap:
         heaps = []
         for sub_root in self._get_heap():
 
-            sub_size = self.get_node(sub_root).size_tree()
+            if measure == 'nnodes':
+                sub_size = self.get_node(sub_root).size_tree()
+            elif measure == 'ntokens':
+                sub_size = self.get_node(sub_root).num_tokenized_tokens()
+            else:
+                pass
+
             if  sub_size >= min_size and sub_size <= max_size:
                 heaps.append(self._create_subheap(sub_root))
 
-        return heaps        
-    
+        return heaps     
+
+    def gredy_decomposition(self, min_size=1, max_size=None, mode='max', measure='nnodes'):
+
+        if max_size is None:
+            max_size = self.get_size()
+
+        def _max_decomposition(node_id):
+
+            res = []
+
+            curr_node = self.get_node(node_id)
+            if not curr_node.is_abstract():
+
+                if measure == 'nnodes':
+                    sub_size = curr_node.size_tree()
+                elif measure == 'ntokens':
+                    sub_size = curr_node.num_tokenized_tokens()
+                else:
+                    raise ValueError("Not supported measure")
+
+                if sub_size >= min_size and sub_size <= max_size: 
+                    
+                    res += [node_id]
+                    return res
+                
+            if curr_node.children is not None:
+                for child_id in curr_node.children:
+                    res += _max_decomposition(child_id)
+
+            return res    
+
+        def _min_decomposition(node_id, walk=[], banned=[]):
+
+            res = []
+
+            walk.append(node_id)
+
+            curr_node = self.get_node(node_id)
+            if not curr_node.is_abstract():
+
+                if measure == 'nnodes':
+                    sub_size = curr_node.size_tree()
+                elif measure == 'ntokens':
+                    sub_size = curr_node.num_tokenized_tokens()
+                else:
+                    raise ValueError("Not supported measure")
+
+            if curr_node.children is not None:
+                for child_id in curr_node.children:
+                    new_res, walk, banned = _min_decomposition(child_id, walk, banned)
+                    res += new_res
+                    walk = walk[:-1]
+            
+            if not curr_node.is_abstract():
+                if sub_size >= min_size and sub_size <= max_size and node_id not in banned: 
+                    res += [node_id]
+                    banned += walk
+            
+            return res, walk, banned              
+
+        heaps_nodes = []
+        if mode == 'max':
+            heaps_nodes = _max_decomposition(self._root_id)
+
+        elif mode == 'min':
+            heaps_nodes, _, _ = _min_decomposition(self._root_id)
+
+        else:
+            raise ValueError("this mode is not supported (chose between 'max' and 'min'")
+        
+        return [self._create_subheap(sub_root) for sub_root in heaps_nodes]
+
+    def tokenize(self, fn_tokenize, *args, **kwargs):
+
+        for node_id in self._get_heap():
+            if not self.get_node(node_id).is_tokenized():               
+
+                self.get_node(node_id).tokenize(self._get_child_pattern(), fn_tokenize, *args, **kwargs)
+            
+        for node_id in self._get_heap():
+            self.get_node(node_id).update_ntokens()
+                
+            """
+            for sub_node in reversed(self.get_node(node_id).get_walk()):
+                self.get_node(sub_node).update_ntokens()
+            """
+                
 
 def build_source_map(source: str) -> Dict[int, str]:
     """Generate an efficent map of an input source code to be used from ```get_source_segment```.
