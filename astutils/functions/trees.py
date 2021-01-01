@@ -1,7 +1,7 @@
 import ast
 import json
 from typing import Dict
-from astutils.misc import ducktype_ast_class
+from astutils.functions.misc import ducktype_ast_class
 
 
 def dict2ast(d: Dict) -> ast.AST:

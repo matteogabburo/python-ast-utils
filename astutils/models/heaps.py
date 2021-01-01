@@ -15,6 +15,7 @@ CHILD_PLACEHOLDER = "<child={}><dlihc>"
 NUMBER_PLACEHOLDER = "<num={}><mun>"
 HEAP_TOKENS = "_heap_tokens"
 TMP_SEQ_SEPARATOR = ">#@>@@§"
+
 SOURCE_MAP_CHUNKS_SIZE = 128
 CHILD_PLACEHOLDER_BEG = CHILD_PLACEHOLDER.split('{')[0]
 CHILD_PLACEHOLDER_END = CHILD_PLACEHOLDER.split('}')[1]
@@ -23,6 +24,7 @@ NUMBER_PLACEHOLDER_BEG = NUMBER_PLACEHOLDER.split("{")[0]
 NUMBER_PLACEHOLDER_END = NUMBER_PLACEHOLDER.split("}")[1]
 CHILD_PLACEHOLDER_BEG = CHILD_PLACEHOLDER.split('{')[0]
 CHILD_PLACEHOLDER_END = CHILD_PLACEHOLDER.split('}')[1]
+
 
 
 def get_class_name(item):
@@ -51,7 +53,7 @@ class CodeSegment:
         # handle numbers to avoid problems during the tree construction
         def _replace(m):
             return NUMBER_PLACEHOLDER.format(m.group(0))
-
+    
         return regex_pattern.sub( _replace, code)
 
     @staticmethod
@@ -77,56 +79,65 @@ class CodeSegment:
         return pieces
 
     def make_segments(self, regex_pattern):
-        
-        self.segments =  self._get_segments(self.code_segment, regex_pattern)
+        self.segments = self._get_segments(self.code_segment, regex_pattern)
 
     def replace_next(self, sep, to_replace, node_id, node_type):
 
-        code_l = self.code_segment.split(sep)
+        if to_replace.code_segment in self.code_segment:
 
-        if to_replace.code_segment in code_l[-1]:
+            code_l = self.code_segment.split(sep)
+            if to_replace.code_segment in code_l[-1]:
 
-            code_l[-1] = code_l[-1].replace(
-                to_replace.code_segment, CHILD_PLACEHOLDER.format(node_id), 1
-            )
+                code_l[-1] = code_l[-1].replace(
+                    to_replace.code_segment, CHILD_PLACEHOLDER.format(node_id), 1
+                )
+
+                self.code_segment = sep.join(code_l) 
+
+            else:
+                self.code_segment = self.code_segment.replace(to_replace.code_segment, CHILD_PLACEHOLDER.format(node_id), 1)
 
             self._segments_map[CHILD_PLACEHOLDER.format(node_id)] = to_replace.code_segment
             self._positions_map[CHILD_PLACEHOLDER.format(node_id)] = node_id
             self._type_map[CHILD_PLACEHOLDER.format(node_id)] = node_type
 
-            self.code_segment = sep.join(code_l) 
+            return True
+        else:
+            return False
+        
 
     def resolve_tuple(self, node_id=None, node_type=None, heap=None):
 
         resolved = []
 
-        for segment in self.segments:
-            
-            curr_tuple = []
-            if segment in self._segments_map:
+        if self.segments is not None:
+            for segment in self.segments:
+                
+                curr_tuple = []
+                if segment in self._segments_map:
 
-                if heap:
+                    if heap:
 
-                    # build tuples recursively
-                    child_id = self._positions_map[segment]
-                    resolved += (heap[child_id].get_tuple(heap=heap))
-                    
+                        # build tuples recursively
+                        child_id = self._positions_map[segment]
+                        resolved += (heap[child_id].get_tuple(heap=heap))
+                        
+                    else:
+                        curr_tuple.append(self._segments_map[segment])
+                        if node_id:
+                            curr_tuple.append(self._positions_map[segment])
+                        if node_type:
+                            curr_tuple.append(self._type_map[segment])
+                        
+                        resolved.append(curr_tuple)
                 else:
-                    curr_tuple.append(self._segments_map[segment])
+                    curr_tuple.append(self._unmask_numbers(segment))
                     if node_id:
-                        curr_tuple.append(self._positions_map[segment])
+                        curr_tuple.append(node_id)
                     if node_type:
-                        curr_tuple.append(self._type_map[segment])
-                    
-                    resolved.append(curr_tuple)
-            else:
-                curr_tuple.append(self._unmask_numbers(segment))
-                if node_id:
-                    curr_tuple.append(node_id)
-                if node_type:
-                    curr_tuple.append(node_type)
+                        curr_tuple.append(node_type)
 
-                resolved.append(curr_tuple)
+                    resolved.append(curr_tuple)
 
         return resolved
 
@@ -142,21 +153,26 @@ class CodeSegment:
                 curr_tuple.append(node_type) 
             
             return curr_tuple
-                
+
         for segment in self.tokenized_segments:
 
             # is a key for the map vocabulary
-            if isinstance(segment, str) and segment in self._tokenized_segments_map:
+            if isinstance(segment, str) and segment in self._positions_map:
                 
                 if heap:
                     # build tuples recursively
                     child_id = self._positions_map[segment]
-                    resolved += (heap[child_id].get_tokenized_tuple(heap=heap))
-                    
+                    accumulator = heap[child_id].get_tokenized_tuple(heap=heap)
+
+                    if isinstance(accumulator, list):      
+                        resolved += accumulator
+                    else:
+                        raise NotImplementedError("Some error has occured, check the code")    
                 else:
                     raise NotImplementedError("Initialize the heap parameter")
 
             else:
+                
                 if isinstance(segment, str):
                     resolved.append(_build_tuple(segment))
 
@@ -164,29 +180,34 @@ class CodeSegment:
                     for sub_seq in segment:
                         resolved.append(_build_tuple(sub_seq))
 
+
         return resolved
+
+
 
     def tokenize(self, regex_pattern, fn_tokenize, *args, **kwargs):
 
         counter = 0
-
+        
         for segment in self.segments:
-            
+
             if segment not in self._segments_map:
 
                 if self.tokenized_segments is None:
                     self.tokenized_segments = []
+                
                 self.tokenized_segments.append(fn_tokenize(self._unmask_numbers(segment), *args, **kwargs))
                 counter += len(self.tokenized_segments[-1])
 
             else:
-                self._tokenized_segments_map[segment] = [fn_tokenize(sub_seq, *args, **kwargs) for sub_seq in self._get_segments(self._unmask_numbers(self._segments_map[segment]), regex_pattern)]
+                
                 if self.tokenized_segments is None:
                     self.tokenized_segments = []
                 self.tokenized_segments.append(segment)
 
         self.n_tokenized_tokens = counter
             
+     
 class HeapNode:
 
     def __init__(self, node_id, parent, node_type, node_value=None, code=None, children=None):
@@ -209,6 +230,8 @@ class HeapNode:
         self._is_tokenized=False
         self._n_tokenized_tokens=None
         self._ntokens_count_updated = False
+
+        self.first_parent_node = None
         
     def update_depth(self):
 
@@ -230,37 +253,48 @@ class HeapNode:
     def get_walk(self):
         return self.walk
 
+
     def _add_ntokens(self, ntokens):
 
         if not self.is_abstract():
+
             if self._n_tokenized_tokens is None:
                 self._n_tokenized_tokens = ntokens
             else:
                 self._n_tokenized_tokens += ntokens
 
+            global VISITED
+            VISITED.append(self.node_id)
+                
+
     def update_ntokens(self):
 
         if not self.is_abstract() and not self._ntokens_count_updated:
         
-            self._add_ntokens(self.code.n_tokenized_tokens)
-            self._ntokens_count_updated = True
+            if not self._ntokens_count_updated:
+                self._add_ntokens(self.code.n_tokenized_tokens)
+                self._ntokens_count_updated = True
 
             def _update_parent_node(candidate, ntokens):
-
-                if candidate is None or candidate.is_root():
-                    # root reached
-                    return None
-                
-                candidate = candidate.parent
-                while candidate.is_abstract():
-                    candidate = candidate.parent 
                 
                 candidate._add_ntokens(ntokens)
+                
+                if candidate.is_root() or candidate is None:
+                    return None
+
+                candidate = candidate.parent 
+                while candidate.is_abstract():
+                    candidate = candidate.parent 
+
                 return candidate
 
-            candidate = self
+            candidate = self.first_parent_node
             while candidate is not None:
+
                 candidate = _update_parent_node(candidate, self.code.n_tokenized_tokens)
+
+
+
 
     def size_tree(self):
         return self._size_tree
@@ -304,9 +338,21 @@ class HeapNode:
     def add_code_segment(self, code_segment):
         self.code = CodeSegment(code_segment) if isinstance(code_segment, str) else code_segment
 
-    @staticmethod
-    def _update_code(source, to_replace, node_id, node_type):
-        source.replace_next(CHILD_PLACEHOLDER_END, to_replace, node_id, node_type)
+    def _update_code(self, node, to_replace, node_id, node_type):
+
+        if not node.is_root():
+
+            success = False
+            if not node.is_abstract() and not node.parent.is_abstract():
+                success = node.parent.code.replace_next(CHILD_PLACEHOLDER_END, to_replace, node_id, node_type)
+                
+            elif not node.is_abstract() and node.parent.is_abstract():
+                success = node.parent.placeholder.replace_next(CHILD_PLACEHOLDER_END, to_replace, node_id, node_type)
+
+            if not success:
+                self._update_code(node.parent, to_replace, node_id, node_type)
+            else:
+                self.first_parent_node = node.parent
 
     def setup_code(self):
 
@@ -319,10 +365,10 @@ class HeapNode:
                 self.placeholder = self.parent.code
             
             elif not self.is_abstract() and self.parent.is_abstract():
-                self._update_code(self.parent.placeholder, self.code, self.node_id, self.node_type)
+                self._update_code(self, self.code, self.node_id, self.node_type)
 
             elif not self.is_abstract() and not self.parent.is_abstract():
-                self._update_code(self.parent.code, self.code, self.node_id,  self.node_type)
+                self._update_code(self, self.code, self.node_id,  self.node_type)
 
     def anonimize_numbers(self, regex_pattern):
         
@@ -334,7 +380,7 @@ class HeapNode:
 
     def make_segments(self, regex_pattern):
 
-        if self.code:
+        if not self.is_abstract():
             self.code.make_segments(regex_pattern)
 
     def get_tuple(self, heap=None):
@@ -449,7 +495,7 @@ class Heap:
             BEG CRITICAL (efficiency)
             """
 
-            if self._capsule._source:
+            if self._have_source():
                 heap_node.add_code_segment(get_source_segment(self._get_source_map(), tree, padded=self.padded))
 
                 # replace segments of code of children nodes with some alias
@@ -465,6 +511,11 @@ class Heap:
                     heap_node.update_walk()
                     heap_node.update_depth()
 
+                    """ BEG FUTURE IMPROVEMENTS, to remove or optimize this part """
+                    # build the segments to be used for the tuples creation
+                    heap_node.make_segments(self._get_child_pattern())
+                    """ END FUTURE IMPROVEMENTS """
+
             """
             END CRITICAL (efficiency)
             """
@@ -478,18 +529,12 @@ class Heap:
                 for field in tree._fields:
                     if field not in self.not_considered_leaves:
                         self._build_heap(tree.__dict__[field],source, field, heap_node)
-                        
-                        """
-                        BEG CRITICAL (efficiency)
-                        """
 
-                        # build the segments to be used for the tuples creation
+                        """ BEG FUTURE IMPROVEMENTS, to remove or optimize this part """
                         if self._have_source():
+                            # build the segments to be used for the tuples creation
                             heap_node.make_segments(self._get_child_pattern())
-
-                        """
-                        END CRITICAL (efficiency)
-                        """
+                        """ END FUTURE IMPROVEMENTS """
             
             if parent is not None:
                 parent._incr_size_tree(heap_node.size_tree())
@@ -513,12 +558,39 @@ class Heap:
     def get_node(self, node_id):
         return self._get_heap()[node_id]
 
-    def get_heap_tuples(self):
-        return self.get_root().get_tuple(heap=self._get_heap())
+    def _check_if_possible_to_return_values(self):
+        if not self._is_tree_empty() and not self._only_root() and self._is_code_embedded():
+            return True
+            
+        elif self._is_tree_empty():
+            return False
+        
+        elif self._only_root() and not self._is_code_embedded():
+            return False
 
+        elif self._is_code_embedded():
+            return True
+
+        elif not self._is_code_embedded():
+            raise Exception("Source code was not passed as parameter during the Heap construction, this method is unavailable")
+
+        else:
+            raise NotImplementedError
+
+    def get_heap_tuples(self):
+
+        if self._check_if_possible_to_return_values():
+            return self.get_root().get_tuple(heap=self._get_heap())
+        else:
+            return ""
+            
     def get_heap_tokenized_tuples(self, fn_tokenize, *args, **kwargs):
-        self.get_root().tokenize(self._get_child_pattern(), fn_tokenize=fn_tokenize, *args, **kwargs)
-        return self.get_root().get_tokenized_tuple(heap=self._get_heap())
+
+        if self._check_if_possible_to_return_values():
+            self.tokenize(fn_tokenize=fn_tokenize, *args, **kwargs)
+            return self.get_root().get_tokenized_tuple(heap=self._get_heap())
+        else:
+            return ""
 
     def get_subtree(self, node_id):
         
@@ -536,17 +608,19 @@ class Heap:
             max_size = self.get_size()
 
         heaps = []
-        for sub_root in self._get_heap():
+        for node_id in self._get_heap():
 
-            if measure == 'nnodes':
-                sub_size = self.get_node(sub_root).size_tree()
-            elif measure == 'ntokens':
-                sub_size = self.get_node(sub_root).num_tokenized_tokens()
-            else:
-                pass
+            if not self.get_node(node_id).is_abstract():
 
-            if  sub_size >= min_size and sub_size <= max_size:
-                heaps.append(self._create_subheap(sub_root))
+                if measure == 'nnodes':
+                    sub_size = self.get_node(node_id).size_tree()
+                elif measure == 'ntokens':
+                    sub_size = self.get_node(node_id).num_tokenized_tokens()
+                else:
+                    pass
+
+                if sub_size >= min_size and sub_size <= max_size:
+                    heaps.append(self._create_subheap(node_id))
 
         return heaps     
 
@@ -570,7 +644,7 @@ class Heap:
                     raise ValueError("Not supported measure")
 
                 if sub_size >= min_size and sub_size <= max_size: 
-                    
+
                     res += [node_id]
                     return res
                 
@@ -621,21 +695,26 @@ class Heap:
         
         return [self._create_subheap(sub_root) for sub_root in heaps_nodes]
 
+    def _is_tree_empty(self):
+        return self.get_root().size_tree() == 0
+
+    def _only_root(self):
+        return self.get_root().size_tree() == 1
+
+    def _is_code_embedded(self):
+
+        return True if self._capsule._source else False
+
     def tokenize(self, fn_tokenize, *args, **kwargs):
 
         for node_id in self._get_heap():
-            if not self.get_node(node_id).is_tokenized():               
-
-                self.get_node(node_id).tokenize(self._get_child_pattern(), fn_tokenize, *args, **kwargs)
+            
+            self.get_node(node_id).tokenize(self._get_child_pattern(), fn_tokenize, *args, **kwargs)
             
         for node_id in self._get_heap():
+            
             self.get_node(node_id).update_ntokens()
-                
-            """
-            for sub_node in reversed(self.get_node(node_id).get_walk()):
-                self.get_node(sub_node).update_ntokens()
-            """
-                
+
 
 def build_source_map(source: str) -> Dict[int, str]:
     """Generate an efficent map of an input source code to be used from ```get_source_segment```.
@@ -698,384 +777,3 @@ def get_source_segment(
         raise Exception
 
     return None
-
-
-def ast2heap(
-    ast_tree: ast.AST,
-    source: str = None,
-    positional: bool = True,
-    not_considered_leaves: List = [],
-) -> List:
-    """Takes in input an Abstract Syntax Tree representing a Python program and return it represented with an heap structure. The resulting structure is defined by a list of nodes. Each node is composed as follows:
-
-    ```
-    heap_node = {
-        _heap_id: (int) the "id" of the node
-        _heap_type: (str) generally it is a non-terminal of the grammar (grammar reference https://docs.python.org/3/library/ast.html)
-        _heap_value: [Optional] (dict) a dictionary containing the values of an ast node (generally can be both a terminal and a non-terminal of the grammar). 
-        _heap_children: [Optional] (list[int]) a list of "_heap_ids". Each id contained in this list is a children of this node
-        _heap_code: [Optional] (str) contain the source code associate with this specific node. Initialized only if the source parameter is initialized
-    }
-    ```
-
-    Args:
-        ast_tree (ast.AST): An Abstract Syntax Tree representing a Python program.
-        source (str, optional): The original code used to build the AST. If not None the final heap will contain a field with the original code associated with the node.
-        positional (str, optional): Considered only if the source parameter is initialized. When positional is True, the field ```_heap_code``` of the final model will contain alias that replace the original value of each subtoken (For example, ```@11``` is a placeolder for the node with ```_heap_id=11```).
-        not_considered_leaves (list, optional): A list containing all the not desidered types. This could be used to reduce the heap size keeping only the wanted nodes. Defaults to [].
-
-    Returns:
-        List: An heap representing the input AST.
-    """
-
-    CHILD_PLACEHOLDER_BEG = CHILD_PLACEHOLDER.split('{')[0]
-    numbers_pattern = re.compile(Number)
-
-    def _build_heap(
-        tree: ast.AST,
-        source,
-        source_map,
-        positional,
-        heap,
-        not_considered_leaves,
-        field,
-        parent,
-    ):
-
-        if isinstance(tree, ast.AST):
-
-            node_id = len(heap)
-
-            # if the current tree is not the root
-            if parent:
-                if HEAP_CHILDREN not in parent:
-                    parent[HEAP_CHILDREN] = []
-                parent[HEAP_CHILDREN].append(node_id)
-
-            class_name = tree.__class__.__name__
-            heap_node = {HEAP_ID: node_id, HEAP_TYPE: class_name}
-
-            if source:
-
-                heap_node[HEAP_CODE] = get_source_segment(source_map, tree, padded=True)
-                if positional:
-
-                    # conditions
-                    def is_node_abstract(node):
-                        return node[HEAP_CODE] is None
-
-                    def is_not_root(heap):
-                        return len(heap) > 0
-
-                    def is_prec_node_abstract(node):
-                        return HEAP_PLACEHOLDER in node
-
-                    def __put_code_placeholder(source, to_replace, node_id):
-
-                        def __find_separator(m):
-                            return m.group(0) + TMP_SEQ_SEPARATOR
-
-                        code_l = source.split(CHILD_PLACEHOLDER_BEG)
-
-                        code_l[-1] = code_l[-1].replace(
-                            to_replace, CHILD_PLACEHOLDER.format(node_id), 1
-                        )
-
-                        return CHILD_PLACEHOLDER_BEG.join(code_l)
-
-                    # handle numbers to avoid problems during the tree construction
-                    def __replace(m):
-                        return NUMBER_PLACEHOLDER.format(m.group(0))
-
-                    if heap_node[HEAP_CODE]:
-                        """heap_node[HEAP_CODE] = re.sub(
-                            Number, __replace, heap_node[HEAP_CODE]
-                        )"""
-                        heap_node[HEAP_CODE] = numbers_pattern.sub( __replace, heap_node[HEAP_CODE])
-
-                    if not is_not_root(heap):
-                        #heap_node[HEAP_CODE] = re.sub(Number, __replace, source)
-                        heap_node[HEAP_CODE] = numbers_pattern.sub( __replace, source)
-
-                    elif is_node_abstract(heap_node) and is_not_root(heap):
-
-                        if not is_node_abstract(parent):
-                            heap_node[HEAP_PLACEHOLDER] = parent[HEAP_CODE]
-                        else:
-                            assert parent[HEAP_PLACEHOLDER]
-                            heap_node[HEAP_PLACEHOLDER] = parent[HEAP_PLACEHOLDER]
-
-                    elif is_not_root(heap) and is_prec_node_abstract(heap):
-                        assert parent[HEAP_PLACEHOLDER]
-                        # replace the first occurrence of the current text in the placeholder
-                        parent[HEAP_PLACEHOLDER] = __put_code_placeholder(
-                            parent[HEAP_PLACEHOLDER], heap_node[HEAP_CODE], node_id
-                        )
-
-                    else:
-                        # replace the first occurrence of the current text in the code
-                        assert HEAP_CODE in parent
-                        if parent[HEAP_CODE]:
-
-                            parent[HEAP_CODE] = __put_code_placeholder(
-                                parent[HEAP_CODE], heap_node[HEAP_CODE], node_id
-                            )
-                        else:
-                            parent[HEAP_PLACEHOLDER] = __put_code_placeholder(
-                                parent[HEAP_PLACEHOLDER], heap_node[HEAP_CODE], node_id
-                            )
-
-            heap.append(heap_node)
-
-            if len(tree._fields) > 0:
-                for field in tree._fields:
-                    if field not in not_considered_leaves:
-                        _build_heap(
-                            tree.__dict__[field],
-                            source,
-                            source_map,
-                            positional,
-                            heap,
-                            not_considered_leaves,
-                            field,
-                            heap_node,
-                        )
-
-        elif isinstance(tree, tuple) or isinstance(tree, list):
-            for element in tree:
-                _build_heap(
-                    element,
-                    source,
-                    source_map,
-                    positional,
-                    heap,
-                    not_considered_leaves,
-                    field,
-                    parent,
-                )
-
-        else:
-            # append to the last inserted node
-            if HEAP_VALUE not in heap[-1]:
-                heap[-1][HEAP_VALUE] = {}
-            heap[-1][HEAP_VALUE][field] = tree
-
-    source_map = None
-    if source:
-        # build the source map
-        source_map = build_source_map(source)
-
-    heap = []
-    _build_heap(
-        ast_tree,
-        source,
-        source_map,
-        positional,
-        heap,
-        not_considered_leaves,
-        None,
-        None,
-    )
-
-    return heap
-
-
-def scompone(heap: list) -> list:
-    """Given an heap representation of a tree generated by ```ast2heap```, return the list of subheaps where each sub heap correspond to a block of code starting without identation.
-
-    Args:
-        heap (list): A heap generated with ```astutils.ast2heap()```.
-
-    Returns:
-        list: A list of subheaps.
-    """
-
-    # make a copy of the input heap and work on it
-    _heap = copy.deepcopy(heap)
-
-    def _dfs_build(heap, root):
-
-        sub_heap = [root]
-
-        if HEAP_CHILDREN in root:
-            for child_id in root[HEAP_CHILDREN]:
-                sub_heap += _dfs_build(heap, heap[child_id])
-
-        return sub_heap
-
-    sub_heaps = []
-    if HEAP_CHILDREN in _heap[0]:
-        for child_id in _heap[0][HEAP_CHILDREN]:
-            sub_heaps.append(_dfs_build(_heap, _heap[child_id]))
-
-    if len(sub_heaps) == 0:
-        # no sub heaps
-        return [_heap]
-    else:
-        return sub_heaps
-
-
-def heap2code(heap: list, inplace: bool = False) -> str:
-    """Given an heap generated by ```ast2heap```, return a string representing the original code from wich the heap was originated.
-
-    Args:
-        heap (list): A heap generated with ```astutils.ast2heap()``` with ```source not None``` and ```positional == True```.
-        inplace (bool, optional): If True, the input heap will be modified by the function. Default to False.
-
-    Returns:
-        list: A string representing the original code.
-    """
-
-    NUMBER_PLACEHOLDER_BEG = NUMBER_PLACEHOLDER.split("{")[0]
-    NUMBER_PLACEHOLDER_END = NUMBER_PLACEHOLDER.split("}")[1]
-
-    if not inplace:
-        # make a copy of the input heap and work on it
-        _heap = copy.deepcopy(heap)
-    else:
-        _heap = heap
-
-    def _dfs_build(root, heap, id_offset, parent):
-
-        # if the heap was generated from an empty file, the heap will contains only the root node without the field "HEAP_CODE"
-        if HEAP_CODE not in root and len(heap) == 1:
-            return ""
-
-        assert HEAP_CODE in root
-
-        def has_children(node):
-            return HEAP_CHILDREN in node
-
-        if has_children(root):
-
-            for heap_node_id in root[HEAP_CHILDREN]:
-
-                # add the offset
-                offsetted_node_id = heap_node_id - id_offset
-                assert heap[offsetted_node_id][HEAP_ID] == heap_node_id
-
-                partial_source = _dfs_build(
-                    heap[offsetted_node_id], heap, id_offset, root
-                )
-
-                if root[HEAP_CODE]:
-                    root[HEAP_CODE] = root[HEAP_CODE].replace(
-                        CHILD_PLACEHOLDER.format(heap_node_id), partial_source, 1
-                    )
-                else:
-                    assert root[HEAP_PLACEHOLDER]
-                    root[HEAP_PLACEHOLDER] = root[HEAP_PLACEHOLDER].replace(
-                        CHILD_PLACEHOLDER.format(heap_node_id), partial_source, 1
-                    )
-        else:
-            # is a leaf
-            pass
-
-        # handle numbers to avoid problems during the tree construction
-        def __replace(m):
-            return m.group(0)[
-                len(NUMBER_PLACEHOLDER_BEG) : -len(NUMBER_PLACEHOLDER_END)
-            ]
-
-        if root[HEAP_CODE]:
-            return re.sub(NUMBER_PLACEHOLDER.format(Number), __replace, root[HEAP_CODE])
-        assert root[HEAP_PLACEHOLDER]
-        return re.sub(
-            NUMBER_PLACEHOLDER.format(Number), __replace, root[HEAP_PLACEHOLDER]
-        )
-
-    assert isinstance(heap, list)
-    return _dfs_build(_heap[0], _heap, _heap[0][HEAP_ID], None)
-
-
-def heap2tokens(heap: list, inplace: bool = False) -> list:
-    """Given an heap generated by ```ast2heap```, return a list of tuple containing the ordered list of tokens and their indexes and their grammar type.
-
-    Args:
-        heap (list): A heap generated with ```astutils.ast2heap()``` with ```source not None``` and ```positional == True```.
-        inplace (bool, optional): If True, the input heap will be modified by the function. Default to False.
-
-    Returns:
-        list: A list of tuple where each tuple is ```(segment of code, ast_node_id, ast_node_type)```.
-    """
-
-    NUMBER_PLACEHOLDER_BEG = NUMBER_PLACEHOLDER.split("{")[0]
-    NUMBER_PLACEHOLDER_END = NUMBER_PLACEHOLDER.split("}")[1]
-    CHILD_PLACEHOLDER_BEG = CHILD_PLACEHOLDER.split('{')[0]
-    CHILD_PLACEHOLDER_END = CHILD_PLACEHOLDER.split('}')[1]
-
-    if not inplace:
-        # make a copy of the input heap and work on it
-        _heap = copy.deepcopy(heap)
-    else:
-        _heap = heap
-
-    def _dfs_build(root, heap, parent, id_offset):
-
-        # if the heap was generated from an empty file, the heap will contains only the root node without the field "HEAP_CODE"
-        if HEAP_CODE not in root and len(heap) == 1:
-            return [("", 0, root[HEAP_TYPE])]
-
-        assert HEAP_CODE in root
-
-        def has_children(node):
-            return HEAP_CHILDREN in node
-
-        def _code2tokens(code, node_id, node_type):
-            
-            code_l = code.replace(CHILD_PLACEHOLDER_BEG, TMP_SEQ_SEPARATOR + CHILD_PLACEHOLDER_BEG).replace(CHILD_PLACEHOLDER_END, CHILD_PLACEHOLDER_END + TMP_SEQ_SEPARATOR).split(TMP_SEQ_SEPARATOR)
-
-            return [(tok, node_id, node_type) for tok in code_l if tok != ""]
-
-        if root[HEAP_CODE]:
-            root[HEAP_TOKENS] = _code2tokens(
-                root[HEAP_CODE], root[HEAP_ID], root[HEAP_TYPE]
-            )
-        else:
-            root[HEAP_TOKENS] = _code2tokens(
-                root[HEAP_PLACEHOLDER], root[HEAP_ID], root[HEAP_TYPE]
-            )
-
-        if has_children(root):
-
-            for heap_node_id in root[HEAP_CHILDREN]:
-
-                # add the offset
-                offsetted_node_id = heap_node_id - id_offset
-                assert heap[offsetted_node_id][HEAP_ID] == heap_node_id
-
-                partial_tokens = _dfs_build(
-                    heap[offsetted_node_id], heap, root, id_offset
-                )
-                for i in range(len(root[HEAP_TOKENS])):
-
-                    token, _, _ = root[HEAP_TOKENS][i]
-                    if token == CHILD_PLACEHOLDER.format(heap_node_id):
-  
-                        root[HEAP_TOKENS] = (
-                            root[HEAP_TOKENS][:i]
-                            + partial_tokens
-                            + root[HEAP_TOKENS][i + 1 :]
-                        )
-                        break
-
-        else:
-            # is a leaf
-            pass
-
-        # handle numbers to avoid problems during the tree construction
-        return [
-            (
-                token.replace(NUMBER_PLACEHOLDER_BEG, "").replace(NUMBER_PLACEHOLDER_END, ""),
-                node_id,
-                node_type,
-            )
-            for token, node_id, node_type in root[HEAP_TOKENS]
-        ]
-
-    return _dfs_build(_heap[0], _heap, None, _heap[0][HEAP_ID])
-
-
-def heap2ast(heap: list) -> ast.AST:
-
-    raise NotImplementedError

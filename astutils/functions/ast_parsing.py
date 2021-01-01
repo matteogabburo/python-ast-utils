@@ -1,7 +1,7 @@
 import ast
 from typing import Tuple
 import sys
-from astutils.misc import _read
+from astutils.functions.misc import _read
 
 
 def ast_parse(
