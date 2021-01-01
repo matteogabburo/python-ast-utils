@@ -173,4 +173,20 @@ def test_decompose(fname, mode, type_comments, feature_version):
     ast_heap = astutils.ast2heap(ast_tree, source=sourcecode)
     sub_heaps = astutils.decompose(ast_heap)
 
-    assert len(sub_heaps) == ast_heap.get_size()
+    # todo Add test case
+    #assert len(sub_heaps) == ast_heap.get_size()
+
+
+@pytest.mark.parametrize(
+    "fname,mode,type_comments,feature_version", _ast_parse_parameters(RESOURCES_PATH),
+)
+def test_greedy_decompose(fname, mode, type_comments, feature_version):
+    ast_tree = astutils.ast_parse(
+        fname, mode=mode, type_comments=type_comments, feature_version=feature_version
+    )
+    sourcecode = _read(fname)
+    ast_heap = astutils.ast2heap(ast_tree, source=sourcecode)
+    sub_heaps = astutils.greedy_decompose(ast_heap)
+
+    # todo Add test case
+    #assert len(sub_heaps) == ast_heap.get_size()
