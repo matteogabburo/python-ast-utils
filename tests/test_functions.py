@@ -140,7 +140,6 @@ def test_ast2heap_heap2code(fname, mode, type_comments, feature_version):
 
     ast_heap = astutils.ast2heap(ast_tree, source=sourcecode)
     source_code_1 = astutils.heap2code(ast_heap)
-    print(source_code_1)
 
     assert _check_instances(sourcecode, source_code_1)
 
@@ -157,7 +156,7 @@ def test_ast2heap_heap2tokens(fname, mode, type_comments, feature_version):
     ast_heap = astutils.ast2heap(ast_tree, source=sourcecode)
     tokens = astutils.heap2tokens(ast_heap)
 
-    source_code_1 = "".join([token[0] for token in tokens])
+    source_code_1 = "".join([token["tok"] for token in tokens])
 
     assert _check_instances(sourcecode, source_code_1)
 
@@ -174,7 +173,7 @@ def test_decompose(fname, mode, type_comments, feature_version):
     sub_heaps = astutils.decompose(ast_heap)
 
     # todo Add test case
-    #assert len(sub_heaps) == ast_heap.get_size()
+    # assert len(sub_heaps) == ast_heap.get_size()
 
 
 @pytest.mark.parametrize(
@@ -189,4 +188,4 @@ def test_greedy_decompose(fname, mode, type_comments, feature_version):
     sub_heaps = astutils.greedy_decompose(ast_heap)
 
     # todo Add test case
-    #assert len(sub_heaps) == ast_heap.get_size()
+    # assert len(sub_heaps) == ast_heap.get_size()

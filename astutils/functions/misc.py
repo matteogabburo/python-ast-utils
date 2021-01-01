@@ -1,6 +1,7 @@
 import ast
-from typing import  Dict
+from typing import Dict
 import time
+
 
 def _read(fn, *args):
     kwargs = {"encoding": "iso-8859-1"}
@@ -44,4 +45,3 @@ def ducktype_ast_class(d: Dict, name: str) -> bool:
         if is_sublist(d[name].keys(), getattr(ast, name)._fields):
             return True
     return False
-
