@@ -634,7 +634,7 @@ class Heap:
             res = []
 
             curr_node = self.get_node(node_id)
-            if not curr_node.is_abstract():
+            if not curr_node.is_abstract() and curr_node.num_tokenized_tokens():
 
                 if measure == 'nnodes':
                     sub_size = curr_node.size_tree()
@@ -642,6 +642,8 @@ class Heap:
                     sub_size = curr_node.num_tokenized_tokens()
                 else:
                     raise ValueError("Not supported measure")
+
+                curr_node.print_descr()
 
                 if sub_size >= min_size and sub_size <= max_size: 
 
@@ -676,7 +678,7 @@ class Heap:
                     res += new_res
                     walk = walk[:-1]
             
-            if not curr_node.is_abstract():
+            if not curr_node.is_abstract() and curr_node.num_tokenized_tokens():
                 if sub_size >= min_size and sub_size <= max_size and node_id not in banned: 
                     res += [node_id]
                     banned += walk
