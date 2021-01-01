@@ -91,13 +91,24 @@ tokens = astutils.heap2tokens(heap_ast)
 assert(sourcecode == "".join([tok for tok, node_id, node_type in tokens]))
 ```
 
-#### HeapScompone:
+#### HeapDecompose:
 ```.py
 import astutils
 sourcecode = "def hello(name):\n\tprint('hello', name)\nhello('John')\n"
 ast = astutils.ast_parse_from_string(sourcecode)
 heap_ast = astutils.ast2heap(ast, source=sourcecode)
 
-sub_heaps = astutils.scompone(heap_ast)
+sub_heaps = astutils.decompose(heap_ast)
+print("num sub-heaps:", len(sub_heaps))
+```
+
+#### HeapGreadyDecompose:
+```.py
+import astutils
+sourcecode = "def hello(name):\n\tprint('hello', name)\nhello('John')\n"
+ast = astutils.ast_parse_from_string(sourcecode)
+heap_ast = astutils.ast2heap(ast, source=sourcecode)
+
+sub_heaps = astutils.greedy_decompose(heap_ast, min_size=1, max_size=4, mode='max', measure="ntokens")
 print("num sub-heaps:", len(sub_heaps))
 ```

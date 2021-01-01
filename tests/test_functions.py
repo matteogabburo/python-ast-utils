@@ -156,7 +156,7 @@ def test_ast2heap_heap2tokens(fname, mode, type_comments, feature_version):
     ast_heap = astutils.ast2heap(ast_tree, source=sourcecode)
     tokens = astutils.heap2tokens(ast_heap)
 
-    source_code_1 = "".join([token[0] for token in tokens])
+    source_code_1 = "".join([token["tok"] for token in tokens])
 
     assert _check_instances(sourcecode, source_code_1)
 
@@ -164,23 +164,28 @@ def test_ast2heap_heap2tokens(fname, mode, type_comments, feature_version):
 @pytest.mark.parametrize(
     "fname,mode,type_comments,feature_version", _ast_parse_parameters(RESOURCES_PATH),
 )
-def test_scompone(fname, mode, type_comments, feature_version):
+def test_decompose(fname, mode, type_comments, feature_version):
     ast_tree = astutils.ast_parse(
         fname, mode=mode, type_comments=type_comments, feature_version=feature_version
     )
     sourcecode = _read(fname)
     ast_heap = astutils.ast2heap(ast_tree, source=sourcecode)
-    sub_heaps = astutils.scompone(ast_heap)
+    sub_heaps = astutils.decompose(ast_heap)
 
-    if len(sub_heaps) > 1:
-        rebuilded_heap = [ast_heap[0]] + [
-            node for sub_heap in sub_heaps for node in sub_heap
-        ]
-    else: 
-        rebuilded_heap = [
-            node for sub_heap in sub_heaps for node in sub_heap
-        ]
+    # todo Add test case
+    # assert len(sub_heaps) == ast_heap.get_size()
 
-    source_code_1 = astutils.heap2code(rebuilded_heap)
 
-    assert _check_instances(sourcecode, source_code_1)
+@pytest.mark.parametrize(
+    "fname,mode,type_comments,feature_version", _ast_parse_parameters(RESOURCES_PATH),
+)
+def test_greedy_decompose(fname, mode, type_comments, feature_version):
+    ast_tree = astutils.ast_parse(
+        fname, mode=mode, type_comments=type_comments, feature_version=feature_version
+    )
+    sourcecode = _read(fname)
+    ast_heap = astutils.ast2heap(ast_tree, source=sourcecode)
+    sub_heaps = astutils.greedy_decompose(ast_heap)
+
+    # todo Add test case
+    # assert len(sub_heaps) == ast_heap.get_size()
