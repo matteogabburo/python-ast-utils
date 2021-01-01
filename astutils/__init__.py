@@ -8,5 +8,6 @@ from astutils.functions.trees import ast2json
 from astutils.functions.heaps import ast2heap
 from astutils.functions.heaps import heap2code
 from astutils.functions.heaps import heap2tokens
+from astutils.functions.heaps import heap2tokenized_tokens
 from astutils.functions.heaps import decompose
 from astutils.functions.heaps import greedy_decompose
